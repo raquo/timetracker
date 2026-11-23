@@ -133,7 +133,7 @@ enum Schema {
         try db.transaction {
             try db.exec("CREATE TABLE IF NOT EXISTS tracker_schema (version INTEGER NOT NULL)")
             var version: Int64
-            if let current = try db.prepare("SELECT version FROM tracker_schema").run().first?.first?.int {
+            if let current = try db.prepare("SELECT version FROM tracker_schema").value()?.int {
                 version = current
             }
             else {
@@ -147,7 +147,7 @@ enum Schema {
                 try db.exec(migrations[Int(version)])
                 version += 1
             }
-            try db.prepare("UPDATE tracker_schema SET version = ?").run([.int(version)])
+            try db.query("UPDATE tracker_schema SET version = ?", [.int(version)])
         }
     }
 }

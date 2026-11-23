@@ -1,6 +1,6 @@
 import Foundation
 
-/// Turns a stream of samples into `tracker_interval` rows.
+/// Turns a stream of samples into `tracker_interval` rows (written through `IntervalStore`).
 ///
 /// The open interval lives in memory and its `end_ms` is flushed every `flushEveryMs`,
 /// so a crash loses at most that much time and every row on disk is always valid.
@@ -22,15 +22,7 @@ final class Recorder {
         var flushedEndMs: Int64
     }
 
-    private let db: Database
-    private let apps: AppLookup
-    private let titles: Lookup<String>
-    private let paths: Lookup<String>
-    private let urls: Lookup<String>
-    private let windowRoles: Lookup<WindowRole>
-    private let insertInterval: Statement
-    private let updateEnd: Statement
-    private let deleteInterval: Statement
+    private let store: IntervalStore
     private var open: OpenInterval?
 
     /// Latest `end_ms` of any closed row. New rows never start before it, so rows never overlap,
@@ -38,25 +30,9 @@ final class Recorder {
     private var watermarkMs: Int64
     private var isClockBehind = false
 
-    init(db: Database) throws {
-        self.db = db
-        apps = try AppLookup(db: db)
-        titles = try Lookup(db: db, table: "tracker_title", column: "title")
-        paths = try Lookup(db: db, table: "tracker_path", column: "path")
-        urls = try Lookup(db: db, table: "tracker_url", column: "url")
-        windowRoles = try Lookup(db: db, table: "tracker_window_role", keyColumns: ["role", "subrole"]) { key in
-            [.text(key.role), .text(key.subrole)]
-        }
-        insertInterval = try db.prepare("""
-            INSERT INTO tracker_interval (
-                start_ms, end_ms, app_id, title_id, path_id, url_id, page_title_id, window_role_id,
-                is_idle, is_screen_locked, is_main_window, is_full_screen
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """)
-        updateEnd = try db.prepare("UPDATE tracker_interval SET end_ms = ? WHERE id = ?")
-        deleteInterval = try db.prepare("DELETE FROM tracker_interval WHERE id = ?")
-        watermarkMs = try db.prepare("SELECT MAX(end_ms) FROM tracker_interval").run().first?.first?.int ?? 0
+    init(store: IntervalStore) throws {
+        self.store = store
+        watermarkMs = try store.latestEndMs()
     }
 
     /// The open row's snapshot, nil when there is none.
@@ -64,10 +40,9 @@ final class Recorder {
         open?.snapshot
     }
 
-    /// `changedAtMs`: when the change to this sample was first seen (see `Settler`); a new row
-    /// starts there. At most `nowMs`.
-    func record(_ sample: Sample, atMs nowMs: Int64, changedAtMs: Int64) throws {
-        let snapshot = sample.snapshot
+    /// `changedAtMs`: when the change to this snapshot was first seen (see `Settler`); a new row
+    /// starts there. At most `nowMs`. `idleSinceMs`: see `Sample`.
+    func record(_ snapshot: Snapshot, idleSinceMs: Int64?, atMs nowMs: Int64, changedAtMs: Int64) throws {
         if var current = open {
             // The open row was last seen at `endMs`; the next sample is now, or for a change, when it was first seen.
             let nextSeenMs = current.snapshot == snapshot ? nowMs : changedAtMs
@@ -80,7 +55,7 @@ final class Recorder {
                 // Kept in memory before flushing: a failed flush must not look like a gap next time.
                 open = current
                 if nowMs - current.flushedEndMs >= Self.flushEveryMs {
-                    try updateEnd.run([.int(nowMs), .int(current.rowID)])
+                    try store.setEnd(nowMs, rowID: current.rowID)
                     open?.flushedEndMs = nowMs
                 }
                 return
@@ -89,15 +64,15 @@ final class Recorder {
                 // The old state held at least until its last sample.
                 var boundaryMs = min(nowMs, max(current.endMs, changedAtMs))
                 // Going idle: the idle stretch really started at the last input, so backdate the boundary.
-                if snapshot.isIdle, !current.snapshot.isIdle, let idleSinceMs = sample.idleSinceMs {
+                if snapshot.isIdle, !current.snapshot.isIdle, let idleSinceMs {
                     boundaryMs = min(boundaryMs, max(current.startMs, idleSinceMs))
                 }
                 // Close first, on its own. If this throws, `open` is kept and the next sample retries.
                 if boundaryMs <= current.startMs {
-                    try deleteInterval.run([.int(current.rowID)])
+                    try store.delete(rowID: current.rowID)
                 }
                 else {
-                    try updateEnd.run([.int(boundaryMs), .int(current.rowID)])
+                    try store.setEnd(boundaryMs, rowID: current.rowID)
                 }
                 watermarkMs = max(watermarkMs, boundaryMs)
                 open = nil
@@ -129,27 +104,17 @@ final class Recorder {
         }
         if current.endMs == current.startMs {
             // Opened by the last sample before closing: no duration, so no row.
-            try deleteInterval.run([.int(current.rowID)])
+            try store.delete(rowID: current.rowID)
         }
         else if current.endMs != current.flushedEndMs {
-            try updateEnd.run([.int(current.endMs), .int(current.rowID)])
+            try store.setEnd(current.endMs, rowID: current.rowID)
         }
         watermarkMs = max(watermarkMs, current.endMs)
         open = nil
     }
 
     private func insert(_ s: Snapshot, startMs: Int64, endMs: Int64) throws -> OpenInterval {
-        let appID = try apps.id(for: s)
-        let titleID = try titles.id(for: s.windowTitle)
-        let pathID = try paths.id(for: s.documentPath)
-        let urlID = try urls.id(for: s.url)
-        let pageTitleID = try titles.id(for: s.pageTitle)
-        let windowRoleID = try windowRoles.id(for: WindowRole(role: s.windowRole, subrole: s.windowSubrole))
-        try insertInterval.run([
-            .int(startMs), .int(endMs),
-            SQLValue(appID), SQLValue(titleID), SQLValue(pathID), SQLValue(urlID), SQLValue(pageTitleID), SQLValue(windowRoleID),
-            SQLValue(s.isIdle), SQLValue(s.isScreenLocked), SQLValue(s.isMainWindow), SQLValue(s.isFullScreen),
-        ])
-        return OpenInterval(rowID: db.lastInsertRowID, snapshot: s, startMs: startMs, endMs: endMs, flushedEndMs: endMs)
+        let rowID = try store.insert(s, startMs: startMs, endMs: endMs)
+        return OpenInterval(rowID: rowID, snapshot: s, startMs: startMs, endMs: endMs, flushedEndMs: endMs)
     }
 }

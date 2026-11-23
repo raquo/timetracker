@@ -6,7 +6,7 @@ Marked **(verified)** where we observed it, **(inferred)** where it's our readin
 
 ## Why Electron apps need this
 
-The window-level Accessibility data that works for native apps tells little about Electron apps: Claude's window title is always "Claude", whatever conversation is open, and `AXDocument` is empty. Electron apps aren't scriptable through Apple Events either. What they show lives in web pages, so the tracker reads the page's URL and title from the web content's Accessibility tree. It does this only for an allowlist of apps (built in: Claude and the browsers), because the tree has a cost.
+The window-level Accessibility data that works for native apps tells little about Electron apps: Claude's window title is always "Claude", whatever conversation is open, and `AXDocument` is empty. Electron apps aren't scriptable through Apple Events either. What they show lives in web pages, so the tracker reads the page's URL and title from the web content's Accessibility tree. Because the tree has a cost, it does this only in apps where probing found content pages, or where the user chose to ("Adaptive page reading" in [PLAN.md](PLAN.md)).
 
 ## How an Electron window is built
 
@@ -20,13 +20,13 @@ The window-level Accessibility data that works for native apps tells little abou
 - **`AXManualAccessibility = true`** on the app element (`AXUIElementCreateApplication(pid)`) makes an Electron app build its web Accessibility tree. Designed for this purpose (assistive apps other than VoiceOver); no side effects on window animations, unlike `AXEnhancedUserInterface` (makes window moves and resizes janky; browsers don't need it, they expose the shown tab anyway, see tracking-techniques.md). **(verified** on Claude)
 - **Built lazily:** the first reads right after switching it on can come back empty. **(verified)** Our dump tool waits 2 s after switching it on.
 - **The flag reads back as false** in Claude even while the tree is on, so reading it tells nothing about whether it's on. Probably the same in all Electron apps. **(verified** on Claude)
-- **Apps can notice it and react.** VS Code, after our dump probe switched its tree on, showed its own popup: "Screen reader usage detected. Do you want to enable editor.accessibilitySupport…?". So switching the tree on isn't always invisible to the user; probe or allowlist an app knowing it may prompt. (Answer no in VS Code: the tracker doesn't need it.)
+- **Apps can notice it and react.** VS Code, after our dump probe switched its tree on, showed its own popup: "Screen reader usage detected. Do you want to enable editor.accessibilitySupport…?". So switching the tree on isn't always invisible to the user; probing an app (or choosing on for it) may make it prompt. (Answer no in VS Code: the tracker doesn't need it.)
 - **It stays on until the app quits.** Once on, the app keeps building and updating the tree for every page change; that's the cost. Not measured yet.
 - **We never switch it off:** we can't tell whether something else started relying on it while we ran (and the flag can't even be read). Options and the open decision: TODO "Tracker: Accessibility tree in other apps" in [PLAN.md](PLAN.md).
 
 ## Finding the content page
 
-What `WebAreaReader` does on every sample of an app whose pages are read, and on each probe ("Adaptive page reading" in [PLAN.md](PLAN.md)) ([WebAreaReader.swift](../tracker/Sources/TimeTracker/WebAreaReader.swift)):
+What `PageSearch` does on every sample of an app whose pages are read, and on each probe ("Adaptive page reading" in [PLAN.md](PLAN.md)) ([PageSearch.swift](../tracker/Sources/TrackerCore/PageReading/PageSearch.swift)):
 
 1. Search the focused window for `AXWebArea` elements: depth-first through `AXChildren`, **never descending into a web area or an `AXToolbar`** (a browser's tab strip), up to 150 elements (500 before 2026-11-23). So it only walks the native wrappers around the pages, not the pages' content.
 2. Read each web area's `AXURL` (reported as a CFURL or a string). Skip the app's own UI and placeholders:
@@ -43,7 +43,7 @@ What `WebAreaReader` does on every sample of an app whose pages are read, and on
 
 ## The Claude desktop app (`com.anthropic.claudefordesktop`)
 
-Code: [Apps/Claude.swift](../tracker/Sources/TimeTracker/Apps/Claude.swift).
+Code: [Apps/Claude.swift](../tracker/Sources/TrackerCore/Apps/Claude.swift).
 
 ### Window and tree (verified)
 
@@ -91,23 +91,23 @@ Code: [Apps/Claude.swift](../tracker/Sources/TimeTracker/Apps/Claude.swift).
 - Desktop tabs: only one web area per window, and the window had many tabs open, so only the active tab's page is attached.
 - Allowlisted on 2026-11-22; since 2026-11-23 found by probing. Its rows record the page URL, with the `#<block-id>` fragment dropped.
 
-## Slack, Obsidian, VS Code: probed with the dump tool, not allowlisted (verified, 2026-11-22)
+## Slack, Obsidian, VS Code: probed with the dump tool (verified, 2026-11-22)
 
 All three: one top-level web area per window, 13–14 elements searched, 5–14 ms.
 
 With probing (since 2026-11-23) the allowlist is gone: Slack and Obsidian will probe to on (each shows a content page; Obsidian's says nothing, see the refinement TODO in PLAN.md), VS Code to off, though probing switches its tree on and can bring up its screen reader popup. Set them in `app_page_reading_choice` to override.
 
-| App | Top-level page | What the tracker would record | Verdict |
+| App | Top-level page | What the tracker would record | Your choice |
 |---|---|---|---|
-| Slack (`com.tinyspeck.slackmacgap`) | `https://app.slack.com/client/<team-id>/<channel-id>`, title = window title (`windsurf-repairs (Channel) - ClubLocarno - Slack`) | URL with stable team and channel IDs (survive renames); the title already names channel and workspace | Worth allowlisting if rules should key on IDs; otherwise the title is enough |
-| Obsidian (`md.obsidian`) | `app://obsidian.md/index.html` for every note, title = window title (`<note> - <vault> - Obsidian <version>`, e.g. `_ 18.0.0 – Plan & TODO - Notes - Obsidian 1.15.1`) | The same constant URL for every note: Obsidian's local UI under its own `app://` scheme, outside the bundle path, so our rule counts it as content. `AXDocument` empty, so no file path either | Don't allowlist: no information. The title carries note and vault (but also Obsidian's version, which changes on every update: a case for title normalization). The note's file could be found from the vault path (Obsidian's `obsidian.json`) and the note name |
-| VS Code (`com.microsoft.VSCode`) | `vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/…/workbench.html`, inside the bundle, so skipped | No URL. Its "Release Notes" tab is a `vscode-webview://…` web area nested inside the workbench (twice), which the search doesn't descend into. But with a file open, **`AXDocument` has the file's full path**, recorded already (window-level, no allowlist needed); the window title is the file name. Switching its tree on triggers a "screen reader detected" popup | Don't allowlist: the window gives title and path, and the tree would keep VS Code thinking a screen reader is running |
+| Slack (`com.tinyspeck.slackmacgap`) | `https://app.slack.com/client/<team-id>/<channel-id>`, title = window title (`windsurf-repairs (Channel) - ClubLocarno - Slack`) | URL with stable team and channel IDs (survive renames); the title already names channel and workspace | Leave on (the probe's result) if rules should key on IDs; otherwise off, the title is enough |
+| Obsidian (`md.obsidian`) | `app://obsidian.md/index.html` for every note, title = window title (`<note> - <vault> - Obsidian <version>`, e.g. `_ 18.0.0 – Plan & TODO - Notes - Obsidian 1.15.1`) | The same constant URL for every note: Obsidian's local UI under its own `app://` scheme, outside the bundle path, so our rule counts it as content. `AXDocument` empty, so no file path either | Off (probing gives on, for nothing): no information. The title carries note and vault (but also Obsidian's version, which changes on every update: a case for title normalization). The note's file could be found from the vault path (Obsidian's `obsidian.json`) and the note name |
+| VS Code (`com.microsoft.VSCode`) | `vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/…/workbench.html`, inside the bundle, so skipped | No URL. Its "Release Notes" tab is a `vscode-webview://…` web area nested inside the workbench (twice), which the search doesn't descend into. But with a file open, **`AXDocument` has the file's full path**, recorded already (window-level, for every app); the window title is the file name. Switching its tree on triggers a "screen reader detected" popup | Off (also probing's result): the window gives title and path, and the tree would keep VS Code thinking a screen reader is running. Choosing off before its first probe avoids the popup |
 
 Lessons:
 - **Local UI under a custom scheme** (`app://`, like Obsidian) passes the "not loaded from the bundle" rule. Harmless (a constant URL), but it's a sign the app has nothing for us in its web tree. If more such apps come up, also skip custom schemes whose host names the app itself (`app://obsidian.md`).
 - **Editors' embedded views** (VS Code webviews, the Claude Code browser pane) are nested web areas. Not seen, by design.
-- **Most apps put what matters in the window title.** Allowlist only apps whose title doesn't say what's open (Claude) or where URL IDs add something rules need (Notion page IDs, Slack channel IDs).
+- **Most apps put what matters in the window title.** Page reading only adds something in apps whose title doesn't say what's open (Claude) or where URL IDs add something rules need (Notion page IDs, Slack channel IDs). Probing turns it on wherever a content page shows, more widely than that; the "on" condition may be refined (TODO in [PLAN.md](PLAN.md)).
 
 ## Other Electron apps (not tried yet)
 
-Installed: Arduino IDE (`cc.arduino.IDE2`, maybe served from `http://localhost`), OpenCode (`ai.opencode.desktop`, maybe `localhost` too), Chatbox (`xyz.chatboxapp.app`). Also Discord, if installed later (remote site in a shell, like Slack). Probing now decides on them by itself; the dump tool shows the search cost and which web areas it finds. Any app-specific rule goes into a file under `tracker/Sources/TimeTracker/Apps/`.
+Installed: Arduino IDE (`cc.arduino.IDE2`, maybe served from `http://localhost`), OpenCode (`ai.opencode.desktop`, maybe `localhost` too), Chatbox (`xyz.chatboxapp.app`). Also Discord, if installed later (remote site in a shell, like Slack). Probing now decides on them by itself; the dump tool shows the search cost and which web areas it finds. Any app-specific rule goes into a file under `tracker/Sources/TrackerCore/Apps/`.

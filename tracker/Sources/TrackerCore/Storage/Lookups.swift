@@ -37,7 +37,7 @@ final class Lookup<Key: Hashable> {
         }
         let params = bind(key)
         let id: Int64
-        if let existing = try select.run(params).first?.first?.int {
+        if let existing = try select.value(params)?.int {
             id = existing
         }
         else {
@@ -74,44 +74,11 @@ struct WindowRole: Hashable {
     }
 }
 
-/// `tracker_app.identifier_type`: what `identifier` holds. Stored as its raw value.
-enum AppIdentifierType: Int64 {
-    case bundleID = 0
-    /// For processes without a bundle ID.
-    case executablePath = 1
-}
-
-/// An app as the user thinks of it, regardless of where it's installed: `tracker_app` minus
-/// `app_path`. The bundle ID, else the full executable path (never a bare name).
-struct AppIdentity: Hashable {
-    let type: AppIdentifierType
-    let identifier: String
-
-    init(type: AppIdentifierType, identifier: String) {
-        self.type = type
-        self.identifier = identifier
-    }
-
-    /// nil when there's neither a bundle ID nor an executable path.
-    init?(bundleID: String?, executablePath: String?) {
-        if let bundleID, !bundleID.isEmpty {
-            self.init(type: .bundleID, identifier: bundleID)
-        }
-        else if let executablePath, !executablePath.isEmpty {
-            self.init(type: .executablePath, identifier: executablePath)
-        }
-        else {
-            return nil
-        }
-    }
-}
-
 /// Get-or-create `tracker_app` rows, keyed by (identifier_type, identifier, app_path).
 /// Keeps each row's `name` current.
 final class AppLookup {
     private struct Key: Hashable {
-        let identifierType: AppIdentifierType
-        let identifier: String
+        let app: AppIdentity
         let appPath: String
     }
 
@@ -127,7 +94,7 @@ final class AppLookup {
             keyColumns: ["identifier_type", "identifier", "app_path"],
             extraColumns: ["name"]
         ) { key in
-            [.int(key.identifierType.rawValue), .text(key.identifier), .text(key.appPath)]
+            [.int(key.app.type.rawValue), .text(key.app.identifier), .text(key.appPath)]
         }
         updateName = try db.prepare("UPDATE tracker_app SET name = ?1 WHERE id = ?2 AND name IS NOT ?1")
     }
@@ -137,7 +104,7 @@ final class AppLookup {
         guard let key = Self.key(for: s) else {
             return nil
         }
-        let name = s.appName ?? URL(fileURLWithPath: key.appPath.isEmpty ? key.identifier : key.appPath).lastPathComponent
+        let name = s.appName ?? URL(fileURLWithPath: key.appPath.isEmpty ? key.app.identifier : key.appPath).lastPathComponent
         guard let id = try lookup.id(for: key, extra: [.text(name)]) else {
             return nil
         }
@@ -149,9 +116,9 @@ final class AppLookup {
     }
 
     private static func key(for s: Snapshot) -> Key? {
-        guard let app = AppIdentity(bundleID: s.bundleID, executablePath: s.executablePath) else {
+        guard let app = s.app else {
             return nil
         }
-        return Key(identifierType: app.type, identifier: app.identifier, appPath: s.bundlePath ?? s.executablePath ?? "")
+        return Key(app: app, appPath: s.bundlePath ?? s.executablePath ?? "")
     }
 }

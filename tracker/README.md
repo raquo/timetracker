@@ -31,8 +31,8 @@ For a quick test without installing: `ALLOW_ADHOC=1 scripts/build.sh`, copy `bui
 
 The tracker records the URL and title of the page in the focused window (`url_id`, `page_title_id`), read from the app's web Accessibility tree, in apps where that's worth it. Which apps is decided per app (`PageReadingPolicy.swift`, "Adaptive page reading" in `../notes/PLAN.md`):
 
-- **Probing:** an app nobody has decided on gets one search of its focused window on window change and about once a minute, recording no page meanwhile. Electron apps (they ship `Electron Framework.framework`) get their tree switched on first (`AXManualAccessibility`), which costs them some CPU and memory until they quit; browsers and other apps expose their pages without a switch.
-- **Probe result** (`tracker_app_page_probe`): a content page seen → on (page read on every sample, with observers); none seen in 30 min of active use within one run → off. A row appears at an app's first probe (`has_content_pages` NULL until decided), with `probe_count` and first / last probe times, saved on the first probe, on a decision, and on quit / sleep.
+- **Probing:** an app nobody has decided on gets one search of its focused window when that's a window not probed last in the app, and about once a minute, recording no page meanwhile. Electron apps (they ship `Electron Framework.framework`) get their tree switched on first (`AXManualAccessibility`), which costs them some CPU and memory until they quit; browsers and other apps expose their pages without a switch.
+- **Probe result** (`tracker_app_page_probe`): a content page seen → on (page read on every sample, with observers); none seen in 30 min of active use (with a focused window to probe) within one run → off. A row appears at an app's first probe (`has_content_pages` NULL until decided), with `probe_count` and first / last probe times, saved on the first probe, on a decision, and on quit / sleep.
 - **Your choice** overrides it: the server-owned table `app_page_reading_choice`, which the tracker only reads, and re-reads when another process writes to the database. Until the server and UI exist, create it by hand:
 
 ```bash
@@ -50,7 +50,21 @@ SQL
 
 To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> /tmp/ax.txt`. Writes the tracker's page search on each of the app's windows (elements visited, time, web areas found), then the focused window's Accessibility tree. Switches the app's tree on and leaves it on.
 
-Code layout: `Apps/` holds app-specific code (`Claude.swift`; `Browsers.swift`, not used yet), `Diagnostics/` the dump tool; the rest is generic.
+## Code layout
+
+- `Sources/TimeTracker/main.swift`: the executable, only calls `TrackerMain.run` in `TrackerCore`.
+- `Sources/TrackerCore/`: everything else, a library so tests can import it.
+  - `App/`: entry point and command line (`TrackerMain`), event wiring (`Tracker`), instance lock, logging.
+  - `Sampling/`: what's on screen now (`Sampler` → `Snapshot`), and holding back unconfirmed changes (`Settler`).
+  - `Recording/`: snapshots into `tracker_interval` rows: the row logic (`Recorder`) and its SQL (`IntervalStore`).
+  - `PageReading/`: finding the page in a window (`PageSearch`, pure tree reads), deciding per app whether to read pages (`PageReadingPolicy`) and its tables (`PageReadingStore`).
+  - `Accessibility/`: `AXUIElement` reads and the `AccessibilityNode` protocol, change notifications (`WindowObserver`), switching Electron trees on.
+  - `Storage/`: SQLite wrapper, schema migrations, lookup tables.
+  - `Privacy/`: `URLScrubber`.
+  - `Apps/`: app-specific code (`Claude.swift`; `Browsers.swift`, not used yet). `Diagnostics/`: the `--dump-ax` tool.
+- `Tests/TrackerCoreTests/`: `swift test` (Swift Testing; works with the Command Line Tools, no Xcode needed).
+
+Seams for tests: the pure parts take time as `atMs` arguments (`Settler`, `Recorder`, `PageReadingPolicy`) and run on a temporary SQLite file; `PageSearch` runs on any `AccessibilityNode`, so on recorded trees as well as live `AXUIElement`s. `Sampler`, `Tracker` and `WindowObserver` talk to macOS directly and are left to end-to-end runs.
 
 ## Look at the data
 

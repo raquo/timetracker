@@ -39,11 +39,10 @@ enum AXDump {
             line("no focused window")
             return 1
         }
-        let reader = WebAreaReader()
-        let windows = [window] + appElement.elements(kAXWindowsAttribute).filter { !CFEqual($0, window) }
+        let windows = [window] + appElement.elements(kAXWindowsAttribute).filter { $0 != window }
         for (i, w) in windows.enumerated() {
             let started = Date()
-            let result = reader.measureSearch(window: w)
+            let result = PageSearch.webAreas(in: w)
             let elapsedMs = Int(Date().timeIntervalSince(started) * 1000)
             let title = w.string(kAXTitleAttribute) ?? "untitled"
             line("search window \(i) (\(title)): visited \(result.visited) elements, \(elapsedMs) ms, \(result.webAreas.count) web areas")

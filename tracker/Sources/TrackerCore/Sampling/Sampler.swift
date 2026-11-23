@@ -1,29 +1,6 @@
 import AppKit
 import ApplicationServices
 
-/// The raw attributes of one moment. Consecutive equal snapshots merge into one interval.
-struct Snapshot: Equatable {
-    var bundleID: String? = nil
-    var appName: String? = nil
-    /// The .app bundle's path, or nil for a process without one.
-    var bundlePath: String? = nil
-    var executablePath: String? = nil
-    var windowTitle: String? = nil
-    /// AXRole / AXSubrole of the focused window. Tells panels and popups apart from normal windows.
-    var windowRole: String? = nil
-    var windowSubrole: String? = nil
-    /// nil: not reported (no focused window, or no Accessibility permission).
-    var isMainWindow: Bool? = nil
-    var isFullScreen: Bool? = nil
-    var documentPath: String? = nil
-    /// URL and title of the page in the focused window's web content (apps whose pages are read,
-    /// see `PageReadingPolicy`).
-    var url: String? = nil
-    var pageTitle: String? = nil
-    var isIdle = false
-    var isScreenLocked = false
-}
-
 /// A snapshot, plus what the tracker needs to know about where it came from.
 struct Sample {
     let snapshot: Snapshot
@@ -36,6 +13,10 @@ struct Sample {
     let pageElement: AXUIElement?
 }
 
+/// Reads what's on screen right now from macOS: the frontmost app, its focused window and page
+/// (per `PageReadingPolicy`), and idle time.
+///
+/// Confined to the tracker's queue.
 final class Sampler {
     /// No input for this long counts as idle. The away rule (N minutes, with exceptions) belongs to the server.
     static let idleThresholdSeconds: Double = 60
@@ -43,7 +24,7 @@ final class Sampler {
     // `kCGAnyInputEventType` (~0) is not imported into Swift.
     private static let anyInputEventType = CGEventType(rawValue: ~0)!
 
-    private let webAreas = WebAreaReader()
+    private let electronTree = ElectronTreeSwitch()
     private let pageReading: PageReadingPolicy
 
     init(pageReading: PageReadingPolicy) {
@@ -52,7 +33,7 @@ final class Sampler {
 
     func sample(nowMs: Int64, isScreenLocked: Bool, isAxTrusted: Bool) -> Sample {
         if isScreenLocked {
-            pageReading.noteSample(app: nil, mode: .off, isActive: false, atMs: nowMs)
+            pageReading.noteSample(app: nil, mode: .off, isActive: false, hasProbeableWindow: false, atMs: nowMs)
             return Sample(
                 snapshot: Snapshot(isScreenLocked: true),
                 idleSinceMs: nil,
@@ -63,23 +44,25 @@ final class Sampler {
         }
         pageReading.refresh()
         var snapshot = Snapshot()
-        var page: WebPage?
+        var page: WebPage<AXUIElement>?
+        var hasProbeableWindow = false
         let frontmost = NSWorkspace.shared.frontmostApplication
-        let identity = AppIdentity(bundleID: frontmost?.bundleIdentifier, executablePath: frontmost?.executableURL?.path)
-        let mode = identity.map(pageReading.mode(for:)) ?? .off
         if let app = frontmost {
             snapshot.bundleID = app.bundleIdentifier
             snapshot.appName = app.localizedName
             snapshot.bundlePath = app.bundleURL?.path
             snapshot.executablePath = app.executableURL?.path
-            if isAxTrusted {
-                let pid = app.processIdentifier
-                let appElement = AXUIElementCreateApplication(pid)
-                if let window = readFocusedWindow(of: appElement, into: &snapshot), let identity {
-                    page = readPage(mode: mode, app: identity, appElement: appElement, pid: pid, window: window, bundlePath: snapshot.bundlePath, atMs: nowMs)
-                    snapshot.url = page?.url
-                    snapshot.pageTitle = page?.title
-                }
+        }
+        let identity = snapshot.app
+        let mode = identity.map(pageReading.mode(for:)) ?? .off
+        if let frontmost, isAxTrusted {
+            let pid = frontmost.processIdentifier
+            let appElement = AXUIElementCreateApplication(pid)
+            if let window = readFocusedWindow(of: appElement, into: &snapshot), let identity {
+                hasProbeableWindow = true
+                page = readPage(mode: mode, app: identity, appElement: appElement, pid: pid, window: window, bundlePath: snapshot.bundlePath, atMs: nowMs)
+                snapshot.url = page?.url
+                snapshot.pageTitle = page?.title
             }
         }
         let idleSeconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: Self.anyInputEventType)
@@ -89,7 +72,7 @@ final class Sampler {
             snapshot.isIdle = true
             idleSinceMs = nowMs - Int64(min(idleSeconds, 365 * 24 * 3600) * 1000)
         }
-        pageReading.noteSample(app: identity, mode: mode, isActive: !snapshot.isIdle, atMs: nowMs)
+        pageReading.noteSample(app: identity, mode: mode, isActive: !snapshot.isIdle, hasProbeableWindow: hasProbeableWindow, atMs: nowMs)
         return Sample(
             snapshot: snapshot,
             idleSinceMs: idleSinceMs,
@@ -110,20 +93,19 @@ final class Sampler {
         window: AXUIElement,
         bundlePath: String?,
         atMs nowMs: Int64
-    ) -> WebPage? {
+    ) -> WebPage<AXUIElement>? {
         switch mode {
         case .off:
             return nil
-        case .on:
-            let pages = webAreas.pages(app: appElement, pid: pid, bundlePath: bundlePath, window: window)
-            return webAreas.choose(from: pages, app: appElement, bundlePath: bundlePath)
-        case .probing:
-            guard pageReading.isProbeDue(pid: pid, window: window, atMs: nowMs) else {
-                return nil
+        case .probing where !pageReading.isProbeDue(app: app, pid: pid, window: window, atMs: nowMs):
+            return nil
+        case .on, .probing:
+            electronTree.enableIfElectron(app: appElement, pid: pid, bundlePath: bundlePath)
+            let pages = PageSearch.contentPages(in: window, bundlePath: bundlePath)
+            if mode == .probing {
+                pageReading.noteProbe(app: app, pid: pid, window: window, hasContentPages: !pages.isEmpty, atMs: nowMs)
             }
-            let pages = webAreas.pages(app: appElement, pid: pid, bundlePath: bundlePath, window: window)
-            pageReading.noteProbe(app: app, pid: pid, window: window, hasContentPages: !pages.isEmpty, atMs: nowMs)
-            return webAreas.choose(from: pages, app: appElement, bundlePath: bundlePath)
+            return PageSearch.choose(from: pages, app: appElement, bundlePath: bundlePath)
         }
     }
 
@@ -137,15 +119,17 @@ final class Sampler {
         snapshot.windowSubrole = window.string(kAXSubroleAttribute)
         snapshot.isMainWindow = window.bool(kAXMainAttribute)
         snapshot.isFullScreen = window.bool(AXName.fullScreen)
-        // AXDocument is a URL string, usually file://. Store file URLs as plain paths.
-        snapshot.documentPath = window.string(kAXDocumentAttribute).map { doc in
-            if let url = URL(string: doc), url.isFileURL {
-                return url.path
-            }
-            else {
-                return doc
-            }
-        }
+        snapshot.documentPath = window.string(kAXDocumentAttribute).map(Self.documentPath(fromAXDocument:))
         return window
+    }
+
+    /// AXDocument is a URL string, usually file://. File URLs are stored as plain paths.
+    static func documentPath(fromAXDocument doc: String) -> String {
+        if let url = URL(string: doc), url.isFileURL {
+            return url.path
+        }
+        else {
+            return doc
+        }
     }
 }

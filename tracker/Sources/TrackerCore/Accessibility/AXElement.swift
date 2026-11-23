@@ -25,8 +25,45 @@ enum Accessibility {
     }
 }
 
+/// The attribute reads that Accessibility tree searches need (`PageSearch`), so they run the
+/// same on live `AXUIElement`s and on recorded trees. `==` is element identity (`CFEqual`).
+///
+/// `Element` is the type itself. It can't be spelled `Self`: `AXUIElement` is a non-final class.
+/// Generic code states `where Node.Element == Node`.
+protocol AccessibilityNode: Hashable {
+    associatedtype Element: AccessibilityNode = Self where Element.Element == Element
+
+    /// nil when missing or empty.
+    func string(_ attribute: String) -> String?
+    func url(_ attribute: String) -> URL?
+    func element(_ attribute: String) -> Element?
+    func elements(_ attribute: String) -> [Element]
+}
+
+extension AccessibilityNode {
+    var role: String? {
+        string(kAXRoleAttribute)
+    }
+
+    var children: [Element] {
+        elements(kAXChildrenAttribute)
+    }
+
+    var parent: Element? {
+        element(kAXParentAttribute)
+    }
+
+    var focusedWindow: Element? {
+        element(kAXFocusedWindowAttribute)
+    }
+
+    var focusedUIElement: Element? {
+        element(kAXFocusedUIElementAttribute)
+    }
+}
+
 /// Typed attribute reads. Each read is a round trip to the app's process.
-extension AXUIElement {
+extension AXUIElement: AccessibilityNode {
     func value(_ attribute: String) -> CFTypeRef? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(self, attribute as CFString, &value) == .success else {
@@ -35,7 +72,6 @@ extension AXUIElement {
         return value
     }
 
-    /// nil when missing or empty.
     func string(_ attribute: String) -> String? {
         guard let string = value(attribute) as? String, !string.isEmpty else {
             return nil
@@ -70,17 +106,5 @@ extension AXUIElement {
     @discardableResult
     func set(_ attribute: String, _ value: Bool) -> AXError {
         AXUIElementSetAttributeValue(self, attribute as CFString, value ? kCFBooleanTrue : kCFBooleanFalse)
-    }
-
-    var role: String? {
-        string(kAXRoleAttribute)
-    }
-
-    var children: [AXUIElement] {
-        elements(kAXChildrenAttribute)
-    }
-
-    var focusedWindow: AXUIElement? {
-        element(kAXFocusedWindowAttribute)
     }
 }

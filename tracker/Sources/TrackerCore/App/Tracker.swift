@@ -47,8 +47,8 @@ final class Tracker {
     private var scheduledTicks: Set<DelayedTick> = []
 
     init(db: Database) throws {
-        recorder = try Recorder(db: db)
-        pageReading = try PageReadingPolicy(db: db)
+        recorder = try Recorder(store: IntervalStore(db: db))
+        pageReading = try PageReadingPolicy(store: PageReadingStore(db: db))
         sampler = Sampler(pageReading: pageReading)
         windowObserver = WindowObserver(queue: queue)
         windowObserver.onChange = { [weak self] in
@@ -130,10 +130,10 @@ final class Tracker {
         switch settler.decide(sample.snapshot, atMs: now, recorded: recorder.openSnapshot) {
         case .record(let changedAtMs):
             do {
-                try recorder.record(sample, atMs: now, changedAtMs: changedAtMs)
+                try recorder.record(sample.snapshot, idleSinceMs: sample.idleSinceMs, atMs: now, changedAtMs: changedAtMs)
             }
             catch {
-                log.error("Failed to record sample: \(String(describing: error), privacy: .public)")
+                log.failure("record sample", error)
             }
         case .wait:
             scheduleTick(.settle)
@@ -161,7 +161,7 @@ final class Tracker {
             try recorder.close()
         }
         catch {
-            log.error("Failed to close interval: \(String(describing: error), privacy: .public)")
+            log.failure("close interval", error)
         }
     }
 

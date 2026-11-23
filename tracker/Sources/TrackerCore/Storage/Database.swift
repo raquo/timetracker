@@ -43,6 +43,15 @@ enum SQLValue: Equatable {
             return nil
         }
     }
+
+    var text: String? {
+        if case .text(let s) = self {
+            return s
+        }
+        else {
+            return nil
+        }
+    }
 }
 
 /// Minimal wrapper over the SQLite C API. Not thread-safe: use from one queue.
@@ -81,6 +90,12 @@ final class Database {
 
     func prepare(_ sql: String) throws -> Statement {
         try Statement(db: self, sql: sql)
+    }
+
+    /// Runs a one-off query and returns all rows.
+    @discardableResult
+    func query(_ sql: String, _ params: [SQLValue] = []) throws -> [[SQLValue]] {
+        try prepare(sql).run(params)
     }
 
     /// Runs `body` in a write transaction. Keep it short: the server waits on it.
@@ -162,5 +177,10 @@ final class Statement {
                 }
             })
         }
+    }
+
+    /// The first column of the first row, nil when there are no rows.
+    func value(_ params: [SQLValue] = []) throws -> SQLValue? {
+        try run(params).first?.first
     }
 }

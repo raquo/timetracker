@@ -68,7 +68,7 @@ All timestamps are Unix epoch **milliseconds as 64-bit integers**, everywhere: S
 
 ### What it records
 
-Schema: `tracker/Sources/TimeTracker/Schema.swift` (the source of truth, with comments).
+Schema: `tracker/Sources/TrackerCore/Storage/Schema.swift` (the source of truth, with comments).
 
 - **`tracker_interval`**, one row per stretch with identical attributes: `start_ms`, `end_ms`; app; window title; window role (AX role + subrole); document path; page URL and page title (apps whose pages are read); `is_idle`, `is_screen_locked`, `is_main_window`, `is_full_screen`; not yet recorded (NULL = not measured): `has_display_sleep_assertion`, `is_camera_in_use`, `is_mic_in_use`. Sleep and tracker downtime are gaps between rows.
 - **`tracker_app`**: one row per (`identifier_type`, `identifier`, `app_path`): `identifier_type` is 0 = bundle ID, or 1 = executable path for processes without one; `app_path` is the `.app` bundle or executable path, so history keeps which copy ran; `name` is the latest display name. "The app" = group by type + identifier.
@@ -178,12 +178,12 @@ Import history and rules so we don't start from zero.
 - **Adaptive page reading (implemented 2026-11-23, replaced the allowlist; `PageReadingPolicy.swift`).** Instead of a fixed list of apps whose page URL and title we read, every app starts in "auto" and the tracker finds out by itself whether reading pages is worth it there.
   - **Scope:** only the page part (web areas: page URL and title, the switch, the extra observers). Window title, kind and document path stay read for every app, always.
   - **Per-app mode:** auto, on, off. On: search every sample, observers for focus / page title / page load (what allowlisted apps got before). Off: no page reading. Auto: probing, below.
-  - **Probing (auto):** one search of the focused window on window change and about once a minute, not every sample; no extra observers; rows are recorded without page URL / title meanwhile. Electron apps (detected by `Contents/Frameworks/Electron Framework.framework` in the bundle, so no list) get `AXManualAccessibility` first, since they show nothing without it; every other app is searched without any switch (browsers and native apps with web views expose their pages anyway).
+  - **Probing (auto):** one search of the focused window when it isn't the window last probed in that app, and about once a minute, not every sample (kept per app, so switching back to an app doesn't search its window again); no extra observers; rows are recorded without page URL / title meanwhile. Electron apps (detected by `Contents/Frameworks/Electron Framework.framework` in the bundle, so no list) get `AXManualAccessibility` first, since they show nothing without it; every other app is searched without any switch (browsers and native apps with web views expose their pages anyway).
   - **Verdict, from what the probes saw** (content pages as today: not in the app's bundle, not `about:`):
     - On: any content page seen (one URL is enough). Deliberately generous: we don't yet know what document-based apps (LibreOffice, Fusion 360, …) expose, so rather over-sample than miss long-lived documents.
     - Off: no content page seen within the evidence threshold.
     - Refine later (TODO below): apps whose only page is constant and says nothing (Obsidian: `app://obsidian.md/index.html` for every note, page title = window title) get "on" for nothing. Possible refinements: require ≥ 2 distinct URLs or a page title that differs from the window title; keep a browser left on one "What's new" page in auto instead of deciding off.
-  - **Evidence threshold:** 30 min of active time (frontmost, not idle, not locked) with probes running, within one tracker run (not persisted). Counted by summing the steps between consecutive samples, each capped at ~10 s, so sleep, hangs and wall clock jumps add nothing. Apps used only briefly stay auto, which is why probing must be cheap.
+  - **Evidence threshold:** 30 min of active time (frontmost, not idle, not locked, with a focused window and the Accessibility permission, so a probe could look), within one tracker run (not persisted). Counted by summing the steps between consecutive samples, each capped at ~10 s, so sleep, hangs and wall clock jumps add nothing. Apps used only briefly stay auto, which is why probing must be cheap.
   - **Search budget:** apps with pages need few elements (Firefox 16, Claude 20, Safari 22, Chrome 56), so it's 150 (was 500); it mainly caps the cost of a fruitless search.
   - **Storage, split by who decides,** so neither side writes the other's tables:
     - Names say who decided: the user's side is a *choice*, the tracker's side a *probe result*, never both called "mode" or "enabled". Sketch:

@@ -2,7 +2,7 @@ import ApplicationServices
 import Foundation
 
 /// Fires when something in the frontmost app changes that a sample would see: its focused
-/// window, that window's title (e.g. switching browser tabs), and for web content apps the
+/// window, that window's title (e.g. switching browser tabs), and for apps whose pages are read the
 /// keyboard focus and the shown page. So the tracker doesn't need a fast poll to catch them.
 ///
 /// Confined to the tracker's queue. macOS delivers notifications on the main run loop;
@@ -58,7 +58,7 @@ final class WindowObserver {
         guard let observer else {
             return
         }
-        if let old = pageElement, let page, CFEqual(old, page) {
+        if let old = pageElement, old == page {
             return
         }
         if let old = pageElement {
@@ -91,7 +91,7 @@ final class WindowObserver {
             return
         }
         let focused = appElement.focusedWindow
-        if let old = windowElement, let focused, CFEqual(old, focused) {
+        if let old = windowElement, old == focused {
             return
         }
         if let old = windowElement {
