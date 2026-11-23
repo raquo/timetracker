@@ -2,7 +2,7 @@
 
 Swift menu-bar-less agent that records raw activity into `~/Library/Application Support/com.raquo.timetracker/timetracker.db`. See `../notes/PLAN.md`, `../notes/tracking-techniques.md` and `../notes/electron-and-claude.md`.
 
-Records now: frontmost app, window title and kind (role, subrole, main, full screen), document path (`AXDocument`), page URL and title in apps that show web pages (browsers, Claude, …; found by probing), idle (≥ 60 s without input, backdated to the last input), screen lock, sleep gaps. URLs are scrubbed before writing (no fragment, credentials or secret-looking query parameters; see `URLScrubber.swift`). A changed sample is recorded only once a second sample ~400 ms later agrees (`Settler.swift`). Not yet: power assertions, camera/mic, menu bar item. Samples on Accessibility events, on clicks, and on a 5 s poll; see `../notes/tracking-techniques.md`.
+Records now: frontmost app, window title and kind (role, subrole, main, full screen), document path (`AXDocument`), page URL and title in apps that show web pages (browsers, Claude, …; found by probing), idle (≥ 60 s without input, backdated to the last input), screen lock, sleep gaps. URLs are scrubbed before writing: no fragment, and credentials and secret-looking parameter values replaced with `REDACTED` (see `URLScrubber.swift`). A changed sample is recorded only once a second sample ~400 ms later agrees (`Settler.swift`). Not yet: power assertions, camera/mic, menu bar item. Samples on Accessibility events, on clicks, and on a 5 s poll; see `../notes/tracking-techniques.md`.
 
 ## One-time setup: signing identity
 

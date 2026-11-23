@@ -1,27 +1,36 @@
 import Foundation
 
-/// Removes the parts of a URL that we never record: they rarely say what's being worked on, and
-/// they can carry secrets. Applied to every URL before it reaches the database (privacy is
+/// Hides the parts of a URL that we never record: secrets and personal data. Values are
+/// replaced with `redacted`, keeping the name, so the URL keeps its shape and says that a secret
+/// was there (a sign-in or password reset link), like logging tools do (Rails' `[FILTERED]`,
+/// OpenTelemetry's `REDACTED`). Applied to every URL before it reaches the database (privacy is
 /// enforced in the tracker, since a later cleanup can't un-write the file). See "URL fragments"
 /// and "Sensitive data in URLs" in notes/PLAN.md.
 ///
+/// Dropped:
 /// - The fragment (`#…`): usually a position within the page (Notion's `#<block-id>`), which would
 ///   split rows, and sometimes a secret (`#access_token=…`). Except for apps that route by
 ///   fragment (`fragmentRoutedHosts`): there its first segment says which view is open, so we
 ///   keep that (Gmail `#inbox/<message-id>` → `#inbox`; the message is in the title anyway).
-/// - User name and password (`https://user:pass@host/`).
-/// - Query parameters whose name says they hold a secret (`?token=…`, `?code=…`, `X-Amz-Signature`)
-///   or personal data (`?email=…`, `?login=…`), and any whose value contains an email address
-///   (decoded repeatedly, so double encoding doesn't hide it). Other parameters stay, since some
-///   say what's open (`?v=` on YouTube, `?q=` in searches).
+///
+/// Redacted:
+/// - User name and password (`https://user:pass@host/` → `https://REDACTED:REDACTED@host/`).
+/// - Values of query parameters whose name says they hold a secret (`?token=…`, `?code=…`,
+///   `X-Amz-Signature`) or personal data (`?email=…`, `?login=…`), and values that contain an
+///   email address (decoded repeatedly, so double encoding doesn't hide it). Other parameters
+///   stay, since some say what's open (`?v=` on YouTube, `?q=` in searches). Empty values stay:
+///   nothing to hide.
 /// - Path parameters under the same names (`/app;jsessionid=…`).
 /// - The same, recursively, in URLs carried as parameter values (`?next=/verify?token=…`,
 ///   `?continue=https://…`): such a value is replaced by its scrubbed URL, re-encoded.
 enum URLScrubber {
-    /// Parameter names removed, in any spelling (see `LooseNamePattern`): secrets, and personal data.
+    /// What replaces a hidden value. Needs no percent-encoding.
+    static let redacted = "REDACTED"
+
+    /// Parameter names whose values are redacted, in any spelling (see `LooseNamePattern`): secrets, and personal data.
     /// Not OAuth's `state`: a one-time nonce, not a secret, and GitHub uses it for views
     /// (`/issues?state=closed`).
-    static let removedNames = LooseNamePattern(
+    static let redactedNames = LooseNamePattern(
         exact: [
             "code", "nonce", "otp", "ticket", "jwt", "sid", "auth", "authorization",
             "key", "sig", "hash", "hmac", "credential", "credentials",
@@ -55,7 +64,7 @@ enum URLScrubber {
     }
 
     /// How deep URLs nested in parameter values are scrubbed. Deeper ones are left as they are
-    /// (but a parameter holding an email address still goes).
+    /// (but a value holding an email address is still redacted).
     static let maxNestingDepth = 3
 
     /// `original`: `components` as a string, returned when nothing changes.
@@ -69,29 +78,25 @@ enum URLScrubber {
                 isChanged = true
             }
         }
-        if components.user != nil || components.password != nil {
-            components.user = nil
-            components.password = nil
+        if components.user != nil {
+            components.user = redacted
+            isChanged = true
+        }
+        if components.password != nil {
+            components.password = redacted
             isChanged = true
         }
         if let path = scrubPathParameters(components.percentEncodedPath) {
             components.percentEncodedPath = path
             isChanged = true
         }
-        // Percent-encoded items, so the parameters we keep are written back exactly as they were.
+        // Percent-encoded items, so everything else is written back exactly as it was.
         if let items = components.percentEncodedQueryItems {
-            var kept: [URLQueryItem] = []
-            for item in items where !removedNames.matches(item.name) {
-                var value = item.value
-                if let nested = value.flatMap({ scrubNestedURL($0, depth: depth) }) {
-                    value = nested
-                }
-                if !isEmailAddress(value) {
-                    kept.append(URLQueryItem(name: item.name, value: value))
-                }
+            let scrubbed = items.map { item in
+                URLQueryItem(name: item.name, value: scrubValue(item.value, name: item.name, depth: depth))
             }
-            if kept != items {
-                components.percentEncodedQueryItems = kept.isEmpty ? nil : kept
+            if scrubbed != items {
+                components.percentEncodedQueryItems = scrubbed
                 isChanged = true
             }
         }
@@ -103,8 +108,24 @@ enum URLScrubber {
         }
     }
 
+    /// A percent-encoded query parameter value, scrubbed: redacted if `name` says it's secret
+    /// or it contains an email address, a nested URL scrubbed. Empty values stay.
+    private static func scrubValue(_ value: String?, name: String, depth: Int) -> String? {
+        guard let value, !value.isEmpty else {
+            return value
+        }
+        if redactedNames.matches(name) {
+            return redacted
+        }
+        if let nested = scrubNestedURL(value, depth: depth) {
+            return nested
+        }
+        return isEmailAddress(value) ? redacted : value
+    }
+
     /// If the percent-encoded `value` is a URL (absolute, or a path starting with `/`) that
-    /// scrubbing changes: the scrubbed URL, percent-encoded as a parameter value. Else nil.
+    /// scrubbing changes: the scrubbed URL, percent-encoded as a parameter value, or redacted if
+    /// an email address is left in it (in its path). Else nil.
     private static func scrubNestedURL(_ value: String, depth: Int) -> String? {
         guard depth < maxNestingDepth, let decoded = value.removingPercentEncoding, decoded.hasPrefix("/") || decoded.contains("://") else {
             return nil
@@ -115,11 +136,18 @@ enum URLScrubber {
         guard let scrubbed = scrub(inner, original: decoded, depth: depth + 1), scrubbed != decoded else {
             return nil
         }
+        // Not the redacted user info: `REDACTED@host` looks like an email address.
+        var withoutUser = URLComponents(string: scrubbed)
+        withoutUser?.user = nil
+        withoutUser?.password = nil
+        if isEmailAddress(withoutUser?.string ?? scrubbed) {
+            return redacted
+        }
         return scrubbed.addingPercentEncoding(withAllowedCharacters: unreservedCharacters)
     }
 
-    /// `path` without the path parameters (`/app;jsessionid=…`, Java servers' session ID) whose
-    /// name is removed, nil if there are none.
+    /// `path` with the values of path parameters (`/app;jsessionid=…`, Java servers' session ID)
+    /// under redacted names redacted, nil if there are none.
     private static func scrubPathParameters(_ path: String) -> String? {
         guard path.contains(";") else {
             return nil
@@ -127,12 +155,16 @@ enum URLScrubber {
         var isChanged = false
         let segments = path.split(separator: "/", omittingEmptySubsequences: false).map { segment in
             let parts = segment.split(separator: ";", omittingEmptySubsequences: false)
-            let kept = parts.dropFirst().filter { !removedNames.matches(String($0.prefix { $0 != "=" })) }
-            if kept.count == parts.count - 1 {
-                return String(segment)
+            let scrubbed = [String(parts[0])] + parts.dropFirst().map { part in
+                let name = part.prefix { $0 != "=" }
+                let value = part.dropFirst(name.count + 1)
+                return value.isEmpty || !redactedNames.matches(String(name)) ? String(part) : "\(name)=\(redacted)"
             }
-            isChanged = true
-            return ([parts[0]] + kept).joined(separator: ";")
+            let joined = scrubbed.joined(separator: ";")
+            if joined != segment {
+                isChanged = true
+            }
+            return joined
         }
         return isChanged ? segments.joined(separator: "/") : nil
     }

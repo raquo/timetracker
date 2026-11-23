@@ -30,7 +30,7 @@ struct PageSearchTests {
         let found = PageSearch.contentPages(in: window(pages, toolbar: toolbar), bundlePath: bundlePath)
         // Not the toolbar's web area, not the iframe within a page, not the two that aren't
         // content. The URL is scrubbed; the title falls back to the description.
-        #expect(found.map(\.url) == ["https://a.example.com/doc", "https://b.example.com/"])
+        #expect(found.map(\.url) == ["https://a.example.com/doc?token=REDACTED", "https://b.example.com/"])
         #expect(found.map(\.title) == ["A", "B"])
         #expect(found.map(\.element) == [pages[0], pages[3]])
     }

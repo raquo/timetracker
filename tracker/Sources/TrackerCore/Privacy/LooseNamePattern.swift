@@ -1,7 +1,7 @@
 import Foundation
 
 /// Matches names loosely, for scrubbing: one rule covers every spelling of a name, since
-/// missing a variant leaks data and an extra match only drops a little.
+/// missing a variant leaks data and an extra match only redacts a little.
 ///
 /// Names and rules are compared after `normalize`: percent-decoded, lowercased, and stripped of
 /// everything but letters and digits. So `access_key`, `access-key`, `accessKey`, `AccessKey`,
