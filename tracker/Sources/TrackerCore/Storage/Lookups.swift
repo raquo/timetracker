@@ -2,13 +2,32 @@ import Foundation
 
 /// Get-or-create IDs in a lookup table whose key columns are UNIQUE together, with an in-memory cache.
 /// Key columns hold '' rather than NULL for "unknown", since NULLs never compare equal.
+///
+/// Strings are told apart byte for byte, as SQLite does: a title is stored exactly as macOS
+/// reported it, whatever was looked up before. Swift's `==` treats canonically equivalent strings
+/// as equal ("é" and "e" + U+0301, as in file names), so the cache isn't keyed on `Key`.
 final class Lookup<Key: Hashable> {
+    /// A bound value, compared as SQLite compares it.
+    private enum ExactValue: Hashable {
+        case null
+        case int(Int64)
+        case bytes([UInt8])
+
+        init(_ value: SQLValue) {
+            switch value {
+            case .null: self = .null
+            case .int(let i): self = .int(i)
+            case .text(let s): self = .bytes(Array(s.utf8))
+            }
+        }
+    }
+
     private let db: Database
     private let select: Statement
     private let insert: Statement
     private let bind: (Key) -> [SQLValue]
     private let maxCacheSize = 10_000
-    private var cache: [Key: Int64] = [:]
+    private var cache: [[ExactValue]: Int64] = [:]
 
     /// `extraColumns`: further columns, set only when a row is created (see `id(for:extra:)`).
     init(
@@ -32,10 +51,11 @@ final class Lookup<Key: Hashable> {
         guard let key else {
             return nil
         }
-        if let cached = cache[key] {
+        let params = bind(key)
+        let cacheKey = params.map(ExactValue.init)
+        if let cached = cache[cacheKey] {
             return cached
         }
-        let params = bind(key)
         let id: Int64
         if let existing = try select.value(params)?.int {
             id = existing
@@ -47,7 +67,7 @@ final class Lookup<Key: Hashable> {
         if cache.count >= maxCacheSize {
             cache.removeAll()
         }
-        cache[key] = id
+        cache[cacheKey] = id
         return id
     }
 }
@@ -108,7 +128,8 @@ final class AppLookup {
         guard let id = try lookup.id(for: key, extra: [.text(name)]) else {
             return nil
         }
-        if names[id] != name {
+        // Byte for byte, like the lookup.
+        if names[id].map({ !$0.utf8.elementsEqual(name.utf8) }) ?? true {
             try updateName.run([.text(name), .int(id)])
             names[id] = name
         }

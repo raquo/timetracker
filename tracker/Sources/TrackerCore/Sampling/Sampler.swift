@@ -119,17 +119,23 @@ final class Sampler {
         snapshot.windowSubrole = window.string(kAXSubroleAttribute)
         snapshot.isMainWindow = window.bool(kAXMainAttribute)
         snapshot.isFullScreen = window.bool(AXName.fullScreen)
-        snapshot.documentPath = window.string(kAXDocumentAttribute).map(Self.documentPath(fromAXDocument:))
+        snapshot.documentPath = window.string(kAXDocumentAttribute).flatMap(Self.documentPath(fromAXDocument:))
         return window
     }
 
-    /// AXDocument is a URL string, usually file://. File URLs are stored as plain paths.
-    static func documentPath(fromAXDocument doc: String) -> String {
-        if let url = URL(string: doc), url.isFileURL {
+    /// AXDocument is a URL string, usually file://. File URLs are stored as plain paths. Other
+    /// URLs (Chrome reports the tab's `https://…`) are scrubbed like page URLs, and like them
+    /// not recorded if they can't be (nil). Anything else is kept as reported.
+    static func documentPath(fromAXDocument doc: String) -> String? {
+        guard let url = URL(string: doc), url.scheme != nil else {
+            // Not taken apart, so not scrubbed: only if it doesn't look like a URL.
+            return doc.contains("://") ? nil : doc
+        }
+        if url.isFileURL {
             return url.path
         }
         else {
-            return doc
+            return URLScrubber.scrub(url)
         }
     }
 }

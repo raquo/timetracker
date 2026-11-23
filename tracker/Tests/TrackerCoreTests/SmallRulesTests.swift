@@ -1,4 +1,5 @@
 import Foundation
+import ApplicationServices
 import Testing
 @testable import TrackerCore
 
@@ -63,14 +64,83 @@ struct DocumentPathTests {
         ("file://localhost/Users/someone/a.txt", "/Users/someone/a.txt"),
         // A folder: trailing slash dropped.
         ("file:///Users/someone/Project/", "/Users/someone/Project"),
-        // Not a file URL: kept as reported.
+        // Other URLs (Chrome reports the tab's): scrubbed like page URLs.
         ("https://example.com/doc", "https://example.com/doc"),
+        ("https://example.com/reset?token=abc&lang=en#step-2", "https://example.com/reset?token=REDACTED&lang=en"),
+        ("https://user:pass@example.com/", "https://REDACTED:REDACTED@example.com/"),
+        ("chrome://settings/passwords", "chrome://settings/passwords"),
+        ("data:text/html,<h1>secret</h1>", "data:text/html,REDACTED"),
+        // Not a URL: kept as reported.
         ("/Users/someone/plain.txt", "/Users/someone/plain.txt"),
+        ("/Users/someone/a b?token=x.txt", "/Users/someone/a b?token=x.txt"),
         ("not a url", "not a url"),
         ("", ""),
     ])
     func documentPath(axDocument: String, expected: String) {
         #expect(Sampler.documentPath(fromAXDocument: axDocument) == expected)
+    }
+
+    /// Rather not recorded than recorded unscrubbed.
+    @Test(arguments: ["data:no-comma", "https://exa mple.com/?token=abc"])
+    func unscrubbableURLIsNotRecorded(axDocument: String) {
+        #expect(Sampler.documentPath(fromAXDocument: axDocument) == nil)
+    }
+}
+
+/// `ElectronTreeSwitch`: switched on once per app run, also when a later app gets the same pid.
+struct ElectronTreeSwitchTests {
+    private let folder: URL
+    private let electronApp: String
+    private let nativeApp: String
+
+    init() throws {
+        folder = FileManager.default.temporaryDirectory.appendingPathComponent("ElectronTreeSwitchTests-\(UUID().uuidString)")
+        electronApp = folder.appendingPathComponent("Chat.app").path
+        nativeApp = folder.appendingPathComponent("Notes.app").path
+        try FileManager.default.createDirectory(atPath: electronApp + "/Contents/Frameworks/Electron Framework.framework", withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: nativeApp + "/Contents/Frameworks", withIntermediateDirectories: true)
+    }
+
+    @Test func switchedOnOncePerAppRun() throws {
+        defer {
+            try? FileManager.default.removeItem(at: folder)
+        }
+        var running: [pid_t: Date] = [500: Date(timeIntervalSince1970: 1_000)]
+        let tree = ElectronTreeSwitch(launchDate: { running[$0] })
+        var switchedOn: [pid_t] = []
+        let enable = { (pid: pid_t, path: String) in
+            tree.enableIfElectron(pid: pid, bundlePath: path) {
+                switchedOn.append(pid)
+                return .success
+            }
+        }
+        enable(500, electronApp)
+        enable(500, electronApp)
+        #expect(switchedOn == [500])
+        // Not Electron: never.
+        enable(600, nativeApp)
+        #expect(switchedOn == [500])
+        // The app quits and a later one gets its pid.
+        running[500] = Date(timeIntervalSince1970: 2_000)
+        enable(500, electronApp)
+        enable(500, electronApp)
+        #expect(switchedOn == [500, 500])
+    }
+
+    @Test func failureIsRetried() throws {
+        defer {
+            try? FileManager.default.removeItem(at: folder)
+        }
+        let tree = ElectronTreeSwitch(launchDate: { _ in Date(timeIntervalSince1970: 1_000) })
+        var results: [AXError] = [.cannotComplete, .success]
+        var attempts = 0
+        for _ in 0..<3 {
+            tree.enableIfElectron(pid: 500, bundlePath: electronApp) {
+                attempts += 1
+                return results.removeFirst()
+            }
+        }
+        #expect(attempts == 2)
     }
 }
 

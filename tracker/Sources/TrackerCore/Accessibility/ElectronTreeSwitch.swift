@@ -12,22 +12,47 @@ import ApplicationServices
 ///
 /// Confined to the tracker's queue.
 final class ElectronTreeSwitch {
+    /// One run of an app. A pid alone isn't enough: once the app quits, macOS can give its pid
+    /// to a later app, which would then never get its tree switched on.
+    private struct AppRun: Hashable {
+        let pid: pid_t
+        /// nil for a process not launched through LaunchServices (rare for an app).
+        let launchDate: Date?
+    }
+
     /// Apps whose tree we've switched on this run.
-    private var enabledPIDs: Set<pid_t> = []
+    private var enabledRuns: Set<AppRun> = []
     /// Whether the bundle at each path is an Electron app.
     private var electronBundles: [String: Bool] = [:]
+    /// The launch date of the app running with this pid, nil if none (or unknown).
+    private let launchDate: (pid_t) -> Date?
+
+    init(launchDate: @escaping (pid_t) -> Date? = { NSRunningApplication(processIdentifier: $0)?.launchDate }) {
+        self.launchDate = launchDate
+    }
 
     /// Switches the tree on if the app is an Electron app and we haven't yet. The tree is built
     /// asynchronously, so the first searches after that may find nothing.
     func enableIfElectron(app: AXUIElement, pid: pid_t, bundlePath: String?) {
-        guard isElectron(bundlePath: bundlePath), !enabledPIDs.contains(pid) else {
+        enableIfElectron(pid: pid, bundlePath: bundlePath) {
+            app.set(AXName.manualAccessibility, true)
+        }
+    }
+
+    /// `switchOn`: sets the flag on the app. Separate for tests.
+    func enableIfElectron(pid: pid_t, bundlePath: String?, switchOn: () -> AXError) {
+        guard isElectron(bundlePath: bundlePath) else {
             return
         }
-        // Prune apps that quit (pids can be reused).
-        enabledPIDs = enabledPIDs.filter { NSRunningApplication(processIdentifier: $0) != nil }
-        let result = app.set(AXName.manualAccessibility, true)
+        let run = AppRun(pid: pid, launchDate: launchDate(pid))
+        guard !enabledRuns.contains(run) else {
+            return
+        }
+        // Prune apps that quit, or whose pid went to another app.
+        enabledRuns = enabledRuns.filter { launchDate($0.pid) == $0.launchDate }
+        let result = switchOn()
         if result == .success {
-            enabledPIDs.insert(pid)
+            enabledRuns.insert(run)
             log.info("Enabled Accessibility tree for pid \(pid)")
         }
         else {

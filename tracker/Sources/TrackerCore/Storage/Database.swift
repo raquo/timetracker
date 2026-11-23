@@ -153,7 +153,8 @@ final class Statement {
             let rc: Int32 = switch param {
             case .null: sqlite3_bind_null(stmt, index)
             case .int(let v): sqlite3_bind_int64(stmt, index, v)
-            case .text(let v): sqlite3_bind_text(stmt, index, v, -1, SQLITE_TRANSIENT)
+            // With its length: a NUL within the string (rare, in a title) would end it otherwise.
+            case .text(let v): sqlite3_bind_text64(stmt, index, v, sqlite3_uint64(v.utf8.count), SQLITE_TRANSIENT, UInt8(SQLITE_UTF8))
             }
             guard rc == SQLITE_OK else {
                 throw SQLiteError(code: rc, message: db.errorMessage, sql: sql)
@@ -173,10 +174,20 @@ final class Statement {
                 switch sqlite3_column_type(stmt, col) {
                 case SQLITE_NULL: .null
                 case SQLITE_INTEGER: .int(sqlite3_column_int64(stmt, col))
-                default: .text(String(cString: sqlite3_column_text(stmt, col)))
+                default: .text(text(column: col))
                 }
             })
         }
+    }
+
+    /// The column as text, with any NUL in it (read up to its length, not to the first NUL).
+    private func text(column col: Int32) -> String {
+        // Text first: it may convert the value, which changes the length.
+        guard let start = sqlite3_column_text(stmt, col) else {
+            return ""
+        }
+        let count = Int(sqlite3_column_bytes(stmt, col))
+        return String(decoding: UnsafeBufferPointer(start: start, count: count), as: UTF8.self)
     }
 
     /// The first column of the first row, nil when there are no rows.
