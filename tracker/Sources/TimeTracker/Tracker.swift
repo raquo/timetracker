@@ -18,11 +18,13 @@ final class Tracker {
     private enum DelayedTick {
         case event
         case click
+        case settle
 
         var delayMs: Int {
             switch self {
             case .event: Tracker.eventDelayMs
             case .click: Tracker.clickDelayMs
+            case .settle: Settler.resampleDelayMs
             }
         }
     }
@@ -30,6 +32,7 @@ final class Tracker {
     private let queue = DispatchQueue(label: "timetracker.tracker")
     private let recorder: Recorder
     private let sampler = Sampler()
+    private let settler = Settler()
     private let windowObserver: WindowObserver
     private var timer: DispatchSourceTimer?
     private var signalSources: [DispatchSourceSignal] = []
@@ -121,11 +124,16 @@ final class Tracker {
         let sample = sampler.sample(nowMs: now, isScreenLocked: isScreenLocked, isAxTrusted: isAxTrusted)
         windowObserver.observe(pid: sample.frontmostPID, watchFocusedElement: sample.isWebContentApp, isAxTrusted: isAxTrusted)
         windowObserver.watchPage(sample.pageElement)
-        do {
-            try recorder.record(sample, atMs: now)
-        }
-        catch {
-            log.error("Failed to record sample: \(String(describing: error), privacy: .public)")
+        switch settler.decide(sample.snapshot, atMs: now, recorded: recorder.openSnapshot) {
+        case .record(let changedAtMs):
+            do {
+                try recorder.record(sample, atMs: now, changedAtMs: changedAtMs)
+            }
+            catch {
+                log.error("Failed to record sample: \(String(describing: error), privacy: .public)")
+            }
+        case .wait:
+            scheduleTick(.settle)
         }
     }
 
@@ -141,8 +149,10 @@ final class Tracker {
     }
 
     /// Takes a final sample, so the time since the last poll isn't lost, then closes the open interval.
+    /// A change seen by that sample can't be confirmed any more, so it's dropped.
     private func closeInterval() {
         tick()
+        settler.reset()
         do {
             try recorder.close()
         }

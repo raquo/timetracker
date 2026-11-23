@@ -3,18 +3,19 @@ import ApplicationServices
 
 /// How to make an app build its web Accessibility tree.
 struct WebContentProfile {
-    /// Set to true on the app element to switch the tree on.
-    let treeSwitchAttribute: String
+    /// Set to true on the app element to switch the tree on. nil: the app exposes it anyway.
+    let treeSwitchAttribute: String?
 
     /// Electron apps. Designed for this; no side effects on window animations.
     static let electron = WebContentProfile(treeSwitchAttribute: AXName.manualAccessibility)
-    // Firefox and Chromium browsers will need `AXName.enhancedUserInterface`.
 
-    /// Apps with a known profile. Other allowlisted apps get `.electron`.
-    static let known: [String: WebContentProfile] = [Claude.bundleID: .electron]
+    /// Browsers expose the shown tab's page without a switch. (`AXEnhancedUserInterface` would
+    /// expose more, with janky window animations as a side effect; not needed.)
+    static let browser = WebContentProfile(treeSwitchAttribute: nil)
 
+    /// Browsers get `.browser`, other apps `.electron`.
     static func forApp(_ bundleID: String) -> WebContentProfile {
-        known[bundleID] ?? .electron
+        Browsers.bundleIDs.contains(bundleID) ? .browser : .electron
     }
 }
 
@@ -30,22 +31,25 @@ struct WebPage {
 ///
 /// Only for allowlisted apps, because it has a cost: Electron apps build their web
 /// Accessibility tree only after we switch it on, and then keep it up to date on every page
-/// change until they quit. See notes/electron-and-claude.md.
+/// change until they quit. Browsers build theirs once any Accessibility client reads it.
+/// See notes/electron-and-claude.md.
 ///
 /// We never switch the tree back off: we can't tell whether something else started relying on
 /// it while we ran (see TODO "Tracker: Accessibility tree in other apps" in notes/PLAN.md).
 /// It goes off when the app quits.
 ///
-/// Allowlist: `defaults write com.raquo.timetracker.tracker accessibilityTreeApps -array <bundle-id> ...`
-/// (restart the tracker afterwards). Default: the Claude desktop app.
+/// Allowlist: the Claude desktop app and the browsers in `Browsers`, plus any apps in
+/// `defaults write com.raquo.timetracker.tracker accessibilityTreeApps -array <bundle-id> ...`
+/// (restart the tracker afterwards).
 ///
 /// Confined to the tracker's queue.
 final class WebAreaReader {
     static let defaultsKey = "accessibilityTreeApps"
-    static let defaultApps = [Claude.bundleID]
+    static let builtInApps: Set<String> = Browsers.bundleIDs.union([Claude.bundleID])
 
     /// Max elements to visit when searching a window for web areas. We never descend into a
-    /// web area, so this only covers the app's own UI around the pages (20 elements in Claude).
+    /// web area or a toolbar (a browser's tab strip), so this only covers the app's own UI
+    /// around the pages (20 elements in Claude).
     private static let searchBudget = 500
     private static let maxParentHops = 100
 
@@ -54,7 +58,8 @@ final class WebAreaReader {
     private var enabledPIDs: Set<pid_t> = []
 
     init() {
-        allowlist = Set(UserDefaults.standard.stringArray(forKey: Self.defaultsKey) ?? Self.defaultApps)
+        let extraApps = UserDefaults.standard.stringArray(forKey: Self.defaultsKey) ?? []
+        allowlist = Self.builtInApps.union(extraApps)
         log.info("Accessibility tree apps: \(self.allowlist.sorted().joined(separator: ", "), privacy: .public)")
     }
 
@@ -93,12 +98,12 @@ final class WebAreaReader {
     }
 
     private func enableTree(app: AXUIElement, pid: pid_t, profile: WebContentProfile) {
-        guard !enabledPIDs.contains(pid) else {
+        guard let attribute = profile.treeSwitchAttribute, !enabledPIDs.contains(pid) else {
             return
         }
         // Prune apps that quit (pids can be reused).
         enabledPIDs = enabledPIDs.filter { NSRunningApplication(processIdentifier: $0) != nil }
-        let result = app.set(profile.treeSwitchAttribute, true)
+        let result = app.set(attribute, true)
         if result == .success {
             enabledPIDs.insert(pid)
             log.info("Enabled Accessibility tree for pid \(pid)")
@@ -110,21 +115,12 @@ final class WebAreaReader {
 
     /// The page shown by `webArea`, if it is content rather than the app's own UI.
     private static func contentPage(_ webArea: AXUIElement, bundlePath: String?) -> WebPage? {
-        guard let url = webArea.url(AXName.url), isContent(url, bundlePath: bundlePath) else {
+        guard let url = webArea.url(AXName.url), isContent(url, bundlePath: bundlePath), let scrubbed = URLScrubber.scrub(url) else {
             return nil
         }
-        return WebPage(element: webArea, url: withoutFragment(url), title: webArea.string(kAXTitleAttribute))
-    }
-
-    /// Drops the `#…` part: it's usually a position within the page (Notion's `#<block-id>`),
-    /// which would split rows without saying anything about what's being worked on, and it can
-    /// carry secrets (`#access_token=…`). See "URL fragments" in notes/PLAN.md.
-    private static func withoutFragment(_ url: URL) -> String {
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false), components.fragment != nil else {
-            return url.absoluteString
-        }
-        components.fragment = nil
-        return components.string ?? url.absoluteString
+        // Firefox and Safari leave the title empty and put it in the description.
+        let title = webArea.string(kAXTitleAttribute) ?? webArea.string(kAXDescriptionAttribute)
+        return WebPage(element: webArea, url: scrubbed, title: title)
     }
 
     /// Pages loaded from the app's own bundle are its UI, not content: Electron's
@@ -154,8 +150,12 @@ final class WebAreaReader {
             return
         }
         budget -= 1
-        if element.role == AXName.webAreaRole {
+        let role = element.role
+        if role == AXName.webAreaRole {
             result.append(element)
+            return
+        }
+        else if role == kAXToolbarRole {
             return
         }
         for child in element.children {

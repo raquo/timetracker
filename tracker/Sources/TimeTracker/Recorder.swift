@@ -59,10 +59,19 @@ final class Recorder {
         watermarkMs = try db.prepare("SELECT MAX(end_ms) FROM tracker_interval").run().first?.first?.int ?? 0
     }
 
-    func record(_ sample: Sample, atMs nowMs: Int64) throws {
+    /// The open row's snapshot, nil when there is none.
+    var openSnapshot: Snapshot? {
+        open?.snapshot
+    }
+
+    /// `changedAtMs`: when the change to this sample was first seen (see `Settler`); a new row
+    /// starts there. At most `nowMs`.
+    func record(_ sample: Sample, atMs nowMs: Int64, changedAtMs: Int64) throws {
         let snapshot = sample.snapshot
         if var current = open {
-            if nowMs < current.endMs || nowMs - current.endMs > Self.maxGapMs {
+            // The open row was last seen at `endMs`; the next sample is now, or for a change, when it was first seen.
+            let nextSeenMs = current.snapshot == snapshot ? nowMs : changedAtMs
+            if nowMs < current.endMs || nextSeenMs - current.endMs > Self.maxGapMs {
                 // Clock went backwards, or we missed samples: don't bridge the gap.
                 try close()
             }
@@ -77,10 +86,11 @@ final class Recorder {
                 return
             }
             else {
+                // The old state held at least until its last sample.
+                var boundaryMs = min(nowMs, max(current.endMs, changedAtMs))
                 // Going idle: the idle stretch really started at the last input, so backdate the boundary.
-                var boundaryMs = nowMs
                 if snapshot.isIdle, !current.snapshot.isIdle, let idleSinceMs = sample.idleSinceMs {
-                    boundaryMs = min(nowMs, max(current.startMs, idleSinceMs))
+                    boundaryMs = min(boundaryMs, max(current.startMs, idleSinceMs))
                 }
                 // Close first, on its own. If this throws, `open` is kept and the next sample retries.
                 if boundaryMs <= current.startMs {
@@ -107,7 +117,8 @@ final class Recorder {
             isClockBehind = false
             log.info("Clock caught up with recorded data; recording again")
         }
-        open = try insert(snapshot, startMs: nowMs, endMs: nowMs)
+        let startMs = min(nowMs, max(watermarkMs, changedAtMs))
+        open = try insert(snapshot, startMs: startMs, endMs: nowMs)
     }
 
     /// Ends the open interval at the last sample. Call on sleep and on quit.

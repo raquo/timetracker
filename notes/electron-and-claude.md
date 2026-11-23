@@ -6,7 +6,7 @@ Marked **(verified)** where we observed it, **(inferred)** where it's our readin
 
 ## Why Electron apps need this
 
-The window-level Accessibility data that works for native apps tells little about Electron apps: Claude's window title is always "Claude", whatever conversation is open, and `AXDocument` is empty. Electron apps aren't scriptable through Apple Events either. What they show lives in web pages, so the tracker reads the page's URL and title from the web content's Accessibility tree. It does this only for an allowlist of apps (default: Claude), because the tree has a cost.
+The window-level Accessibility data that works for native apps tells little about Electron apps: Claude's window title is always "Claude", whatever conversation is open, and `AXDocument` is empty. Electron apps aren't scriptable through Apple Events either. What they show lives in web pages, so the tracker reads the page's URL and title from the web content's Accessibility tree. It does this only for an allowlist of apps (built in: Claude and the browsers), because the tree has a cost.
 
 ## How an Electron window is built
 
@@ -17,7 +17,7 @@ The window-level Accessibility data that works for native apps tells little abou
 
 ## Switching the tree on
 
-- **`AXManualAccessibility = true`** on the app element (`AXUIElementCreateApplication(pid)`) makes an Electron app build its web Accessibility tree. Designed for this purpose (assistive apps other than VoiceOver); no side effects on window animations, unlike `AXEnhancedUserInterface` (needed for Firefox / Chromium browsers, makes window moves and resizes janky). **(verified** on Claude)
+- **`AXManualAccessibility = true`** on the app element (`AXUIElementCreateApplication(pid)`) makes an Electron app build its web Accessibility tree. Designed for this purpose (assistive apps other than VoiceOver); no side effects on window animations, unlike `AXEnhancedUserInterface` (makes window moves and resizes janky; browsers don't need it, they expose the shown tab anyway, see tracking-techniques.md). **(verified** on Claude)
 - **Built lazily:** the first reads right after switching it on can come back empty. **(verified)** Our dump tool waits 2 s after switching it on.
 - **The flag reads back as false** in Claude even while the tree is on, so reading it tells nothing about whether it's on. Probably the same in all Electron apps. **(verified** on Claude)
 - **Apps can notice it and react.** VS Code, after our dump probe switched its tree on, showed its own popup: "Screen reader usage detected. Do you want to enable editor.accessibilitySupport…?". So switching the tree on isn't always invisible to the user; probe or allowlist an app knowing it may prompt. (Answer no in VS Code: the tracker doesn't need it.)
@@ -28,12 +28,12 @@ The window-level Accessibility data that works for native apps tells little abou
 
 What `WebAreaReader` does on every sample of an allowlisted app ([WebAreaReader.swift](../tracker/Sources/TimeTracker/WebAreaReader.swift)):
 
-1. Search the focused window for `AXWebArea` elements: depth-first through `AXChildren`, **never descending into a web area**, up to 500 elements. So it only walks the native wrappers around the pages, not the pages' content.
+1. Search the focused window for `AXWebArea` elements: depth-first through `AXChildren`, **never descending into a web area or an `AXToolbar`** (a browser's tab strip), up to 500 elements. So it only walks the native wrappers around the pages, not the pages' content.
 2. Read each web area's `AXURL` (reported as a CFURL or a string). Skip the app's own UI and placeholders:
    - pages loaded from inside the app's bundle (the URL's path is inside the `.app`, whatever the scheme: Electron's `file://…/app.asar/…`, VS Code's `vscode-file://vscode-app/…/Visual Studio Code.app/…`)
    - `about:` pages (`about:blank`)
    - everything else counts, including local `file://` documents and custom schemes.
-3. One content page left → record its URL and `AXTitle` (the document's `<title>`). Several → the one holding keyboard focus (walk `AXParent` up from the app's `AXFocusedUIElement` to a web area). None of them focused, or no content page → no URL (rather none than the wrong one).
+3. One content page left → record its URL (scrubbed, see PLAN.md) and `AXTitle` (the document's `<title>`; Firefox and Safari leave it empty and put it in `AXDescription`). Several → the one holding keyboard focus (walk `AXParent` up from the app's `AXFocusedUIElement` to a web area). None of them focused, or no content page → no URL (rather none than the wrong one).
 
 **Cost (verified, Claude, 2026-11-22):** the search visits 20 elements, about 44 calls in all (role and children per element, then URL and title), 4–17 ms per sample, median ~8 ms. The same while Claude streams a long reply. Each call is a round trip to the app's process; Electron answers them in its main (browser) process, not the page's renderer **(inferred)**. So the tracker searches afresh on every sample instead of caching the page element, which also rules out reporting a page that's no longer shown. Apps with a bigger UI around their pages could cost more (up to 500 elements); measure each app with the dump tool before allowlisting it.
 
