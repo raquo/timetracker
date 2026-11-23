@@ -147,6 +147,18 @@ struct URLScrubberTests {
         ("https://example.com/r?next=%2Fu%2Falice%40example.com%2Fprofile&x=1", "https://example.com/r?next=REDACTED&x=1"),
         ("https://example.com/r?next=%2Fu%2Falice%40example.com%3Ftoken%3Dt&x=1", "https://example.com/r?next=REDACTED&x=1"),
         ("https://example.com/r?next=https%3A%2F%2Falice%40example.com%2F", "https://example.com/r?next=https%3A%2F%2FREDACTED%40example.com%2F"),
+        // Form field names (Rails, PHP): the innermost key counts, bracketed or encoded.
+        ("https://example.com/session?user[login]=bob&user[remember]=1", "https://example.com/session?user%5Blogin%5D=REDACTED&user%5Bremember%5D=1"),
+        ("https://example.com/session?user%5Blogin%5D=bob&user%5Bpassword%5D=pw&user%5Btheme%5D=dark", "https://example.com/session?user%5Blogin%5D=REDACTED&user%5Bpassword%5D=REDACTED&user%5Btheme%5D=dark"),
+        ("https://example.com/f?a%5Bb%5D%5Bcode%5D=1&a%5Bcode%5D%5Bb%5D=2", "https://example.com/f?a%5Bb%5D%5Bcode%5D=REDACTED&a%5Bcode%5D%5Bb%5D=2"),
+        // Parameters after ';' within a query value, as some servers split on it too.
+        ("https://example.com/s?a=1;token=abc;b=2&c=3", "https://example.com/s?a=1;token=REDACTED;b=2&c=3"),
+        ("https://example.com/s?a=1;token=;sid", "https://example.com/s?a=1;token=;sid"),
+        // A data: URL is the page itself: only its media type stays.
+        ("data:text/html,%3Ch1%3EHi%3C/h1%3E", "data:text/html,REDACTED"),
+        ("data:image/png;base64,iVBORw0KGgo=", "data:image/png;base64,REDACTED"),
+        ("DATA:,hello", "DATA:,REDACTED"),
+        ("data:text/plain,", "data:text/plain,"),
         // Everything at once.
         ("https://bob:pw@app.example.com/p/1?view=grid&token=t#row-5", "https://REDACTED:REDACTED@app.example.com/p/1?view=grid&token=REDACTED"),
     ])
@@ -189,6 +201,11 @@ struct URLScrubberTests {
         // Not normalized: dot segments, case, default port, trailing '?'.
         "HTTPS://Example.COM:443/a/./b/../c?",
         "about:blank",
+        // A blob: URL names an object in the page, nothing more.
+        "blob:https://example.com/550e8400-e29b-41d4-a716-446655440000",
+        // Semicolons in values, and form fields under other names.
+        "https://example.com/s?q=a;b&x=c;lang=en",
+        "https://example.com/f?user%5Btheme%5D=dark&filter%5Bstatus%5D%5B%5D=open&sort%5B%5D=",
         "vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-sandbox/workbench/workbench.html",
     ])
     func keepsCleanURLs(input: String) {

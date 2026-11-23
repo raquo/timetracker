@@ -111,6 +111,23 @@ struct RecorderTests {
         #expect(try h.rows() == [row(a, 0, 7_000), row(Fixtures.idle(b), 7_000, 70_000)])
     }
 
+    @Test func unlockingWithoutInputLeavesTheLockedRowAlone() throws {
+        try h.record(a, at: 0)
+        try h.record(Fixtures.locked, at: 10_000)
+        try h.record(Fixtures.locked, at: 15_000)
+        // Unlocked by Apple Watch: no input since before the lock. The screen was locked
+        // until now, not idle.
+        try h.record(Fixtures.idle(a), at: 600_000, changedAt: 20_000, idleSince: 9_000)
+        #expect(try h.rows() == [row(a, 0, 10_000), row(Fixtures.locked, 10_000, 20_000), row(Fixtures.idle(a), 20_000, 600_000)])
+    }
+
+    @Test func inputOnTheLockScreenDoesntSplitTheLockedRow() throws {
+        try h.record(Fixtures.locked, at: 0)
+        try h.record(Fixtures.locked, at: 5_000)
+        try h.record(Fixtures.idle(a), at: 10_000, idleSince: 3_000)
+        #expect(try h.rows() == [row(Fixtures.locked, 0, 10_000), row(Fixtures.idle(a), 10_000, 10_000)])
+    }
+
     @Test func onlyGoingIdleBackdates() throws {
         let idleA = Fixtures.idle(a)
         let idleB = Fixtures.idle(b)
@@ -392,6 +409,19 @@ struct PipelineTests {
         try h.tick(idleB, at: 70_400, idleSince: 10_000)
         try h.close()
         #expect(try h.rows() == [row(a, 0, 10_000), row(Fixtures.idle(a), 10_000, 70_000), row(idleB, 70_000, 70_400)])
+    }
+
+    @Test func unlockingWithoutInputThroughTheSettler() throws {
+        try h.tick(a, at: 0)
+        try h.tick(a, at: 5_000)
+        for at in stride(from: Int64(10_000), through: 600_000, by: 5_000) {
+            try h.tick(Fixtures.locked, at: at)
+        }
+        let idleA = Fixtures.idle(a)
+        try h.tick(idleA, at: 602_000, idleSince: 9_000)
+        try h.tick(idleA, at: 602_400, idleSince: 9_000)
+        try h.close()
+        #expect(try h.rows() == [row(a, 0, 10_000), row(Fixtures.locked, 10_000, 602_000), row(idleA, 602_000, 602_400)])
     }
 
     @Test func unconfirmedChangeAtCloseIsDropped() throws {

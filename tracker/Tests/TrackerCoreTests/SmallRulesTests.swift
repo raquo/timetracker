@@ -109,3 +109,23 @@ struct WindowRoleTests {
         #expect(subroleOnly?.subrole == "AXDialog")
     }
 }
+
+struct CommandLineTests {
+    private func command(_ args: String...) -> TrackerMain.Command {
+        TrackerMain.command(arguments: ["/Applications/TimeTracker.app/Contents/MacOS/TimeTracker"] + args)
+    }
+
+    @Test func parses() {
+        #expect(command() == .track)
+        #expect(command("--dump-ax", "com.google.Chrome", "/tmp/chrome.json") == .dumpAX(bundleID: "com.google.Chrome", outputPath: "/tmp/chrome.json"))
+        // Arguments macOS or Xcode add are ignored.
+        #expect(command("-NSDocumentRevisionsDebugMode", "YES") == .track)
+        #expect(TrackerMain.command(arguments: []) == .track)
+    }
+
+    @Test func dumpAXWithTheWrongArgumentsIsAnError() {
+        #expect(command("--dump-ax") == .usageError)
+        #expect(command("--dump-ax", "com.google.Chrome") == .usageError)
+        #expect(command("--dump-ax", "com.google.Chrome", "/tmp/a.json", "extra") == .usageError)
+    }
+}

@@ -65,10 +65,11 @@ final class Recorder {
                 let boundaryMs = min(nowMs, max(current.endMs, changedAtMs))
                 // Going idle: the idle stretch really started at the last input, so the old row
                 // ends there. If something else changed too, the old state stayed on screen,
-                // idle, until the change was seen: that gets a row of its own.
+                // idle, until the change was seen: that gets a row of its own. Not from a locked
+                // screen (unlocked without input, by Apple Watch): it was locked all along.
                 var oldEndMs = boundaryMs
                 var idleOld: Snapshot? = nil
-                if snapshot.isIdle, !current.snapshot.isIdle, let idleSinceMs {
+                if snapshot.isIdle, !current.snapshot.isIdle, !current.snapshot.isScreenLocked, let idleSinceMs {
                     oldEndMs = min(boundaryMs, max(current.startMs, idleSinceMs))
                     var wentIdle = current.snapshot
                     wentIdle.isIdle = true

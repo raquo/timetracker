@@ -7,9 +7,38 @@ import os
 /// - `TimeTracker`: track, into `databasePath()`.
 /// - `TimeTracker --dump-ax <bundle-id> <output-file>`: see `AXDump`.
 public enum TrackerMain {
+    enum Command: Equatable {
+        case track
+        case dumpAX(bundleID: String, outputPath: String)
+        /// `--dump-ax` with the wrong arguments.
+        case usageError
+    }
+
+    static let usage = "usage: TimeTracker [--dump-ax <bundle-id> <output-file>]"
+
+    /// Other arguments are ignored: macOS and Xcode may add their own (`-NSDocumentRevisionsDebugMode YES`).
+    static func command(arguments: [String]) -> Command {
+        guard arguments.count >= 2, arguments[1] == "--dump-ax" else {
+            return .track
+        }
+        if arguments.count == 4 {
+            return .dumpAX(bundleID: arguments[2], outputPath: arguments[3])
+        }
+        else {
+            return .usageError
+        }
+    }
+
     public static func run(arguments: [String]) -> Never {
-        if arguments.count == 4 && arguments[1] == "--dump-ax" {
-            exit(AXDump.run(bundleID: arguments[2], outputPath: arguments[3]))
+        switch command(arguments: arguments) {
+        case .track:
+            break
+        case .dumpAX(let bundleID, let outputPath):
+            exit(AXDump.run(bundleID: bundleID, outputPath: outputPath))
+        case .usageError:
+            // Not tracking instead: the mistake would go unnoticed.
+            FileHandle.standardError.write(Data("\(usage)\n".utf8))
+            exit(2)
         }
 
         let path: String

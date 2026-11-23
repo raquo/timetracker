@@ -32,6 +32,8 @@ struct LooseNamePatternTests {
         // Containing, any spelling, anywhere.
         "api_key", "apiKey", "x-api-key", "X-API-KEY", "xApiKey", "google_api_key_v2", "apikey",
         "token", "access_token", "accessToken", "csrfToken", "TOKEN_ID", "max_tokens",
+        // A bracketed name's innermost key, raw or percent-encoded, exact or containing.
+        "user[key]", "a[b][Login-Hint]", "user%5Bkey%5D", "form[api_key]", "key[]",
     ])
     func matches(name: String) {
         #expect(pattern.matches(name))
@@ -42,9 +44,21 @@ struct LooseNamePatternTests {
         "keyword", "monkey", "keys", "key_id", "sort_key", "login", "hint", "login_hints",
         // Parts must appear whole.
         "api", "api_k", "tok", "tokn",
+        // Only the innermost key, and only a trailing one.
+        "key[name]", "a[key][b]", "user[keys]", "[key]x", "user[]", "user[",
         "", "q", "v",
     ])
     func doesntMatch(name: String) {
         #expect(!pattern.matches(name))
+    }
+
+    @Test func innermostKey() {
+        #expect(LooseNamePattern.innermostKey("user[login]") == "login")
+        #expect(LooseNamePattern.innermostKey("a[b][c]") == "c")
+        #expect(LooseNamePattern.innermostKey("a%5Bb%5D") == "b")
+        #expect(LooseNamePattern.innermostKey("a[]") == "")
+        #expect(LooseNamePattern.innermostKey("a[b]c") == nil)
+        #expect(LooseNamePattern.innermostKey("a]") == nil)
+        #expect(LooseNamePattern.innermostKey("login") == nil)
     }
 }

@@ -20,9 +20,12 @@ import Foundation
 ///   email address (decoded repeatedly, so double encoding doesn't hide it). Other parameters
 ///   stay, since some say what's open (`?v=` on YouTube, `?q=` in searches). Empty values stay:
 ///   nothing to hide.
-/// - Path parameters under the same names (`/app;jsessionid=…`).
+/// - Path parameters under the same names (`/app;jsessionid=…`), and parameters after a `;` in
+///   a query value (`?a=1;token=…`: some servers split the query on `;` too).
 /// - The same, recursively, in URLs carried as parameter values (`?next=/verify?token=…`,
 ///   `?continue=https://…`): such a value is replaced by its scrubbed URL, re-encoded.
+/// - The content of a `data:` URL (`data:image/png;base64,…`): it's the page itself. Its media
+///   type stays.
 enum URLScrubber {
     /// What replaces a hidden value. Needs no percent-encoding.
     static let redacted = "REDACTED"
@@ -57,6 +60,9 @@ enum URLScrubber {
     /// nil when the URL can't be taken apart or put back together: then it isn't recorded at
     /// all, rather than recorded unscrubbed.
     static func scrub(_ url: URL) -> String? {
+        if url.scheme?.lowercased() == "data" {
+            return scrubDataURL(url.absoluteString)
+        }
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return nil
         }
@@ -120,7 +126,20 @@ enum URLScrubber {
         if let nested = scrubNestedURL(value, depth: depth) {
             return nested
         }
-        return isEmailAddress(value) ? redacted : value
+        if isEmailAddress(value) {
+            return redacted
+        }
+        return scrubParameters(Substring(value))
+    }
+
+    /// `data:<media type>,<content>` → `data:<media type>,REDACTED`. Empty content stays. nil
+    /// without the comma: not a data URL we can take apart.
+    private static func scrubDataURL(_ url: String) -> String? {
+        guard let comma = url.firstIndex(of: ",") else {
+            return nil
+        }
+        let header = url[...comma]
+        return url.index(after: comma) == url.endIndex ? url : header + redacted
     }
 
     /// If the percent-encoded `value` is a URL (absolute, or a path starting with `/`) that
@@ -152,21 +171,20 @@ enum URLScrubber {
         guard path.contains(";") else {
             return nil
         }
-        var isChanged = false
-        let segments = path.split(separator: "/", omittingEmptySubsequences: false).map { segment in
-            let parts = segment.split(separator: ";", omittingEmptySubsequences: false)
-            let scrubbed = [String(parts[0])] + parts.dropFirst().map { part in
-                let name = part.prefix { $0 != "=" }
-                let value = part.dropFirst(name.count + 1)
-                return value.isEmpty || !redactedNames.matches(String(name)) ? String(part) : "\(name)=\(redacted)"
-            }
-            let joined = scrubbed.joined(separator: ";")
-            if joined != segment {
-                isChanged = true
-            }
-            return joined
+        let scrubbed = path.split(separator: "/", omittingEmptySubsequences: false).map(scrubParameters).joined(separator: "/")
+        return scrubbed == path ? nil : scrubbed
+    }
+
+    /// `text` with the values of its `;name=value` parameters under redacted names redacted.
+    /// What's before the first `;` stays.
+    private static func scrubParameters(_ text: Substring) -> String {
+        let parts = text.split(separator: ";", omittingEmptySubsequences: false)
+        let scrubbed = [String(parts[0])] + parts.dropFirst().map { part in
+            let name = part.prefix { $0 != "=" }
+            let value = part.dropFirst(name.count + 1)
+            return value.isEmpty || !redactedNames.matches(String(name)) ? String(part) : "\(name)=\(redacted)"
         }
-        return isChanged ? segments.joined(separator: "/") : nil
+        return scrubbed.joined(separator: ";")
     }
 
     /// RFC 3986 unreserved characters: everything else is percent-encoded in a nested URL.
