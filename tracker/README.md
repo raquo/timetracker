@@ -1,6 +1,6 @@
 # Time Tracker: activity tracker
 
-Swift menu-bar-less agent that records raw activity into `~/Library/Application Support/com.raquo.timetracker/timetracker.db`. See `../notes/PLAN.md` and `../notes/tracking-techniques.md`.
+Swift menu-bar-less agent that records raw activity into `~/Library/Application Support/com.raquo.timetracker/timetracker.db`. See `../notes/PLAN.md`, `../notes/tracking-techniques.md` and `../notes/electron-and-claude.md`.
 
 Records now: frontmost app, window title and kind (role, subrole, main, full screen), document path (`AXDocument`), page URL and title for allowlisted apps (Claude), idle (≥ 60 s without input, backdated to the last input), screen lock, sleep gaps. Not yet: Safari / Chromium URLs, power assertions, camera/mic, menu bar item. Samples on Accessibility events, on clicks, and on a 5 s poll; see `../notes/tracking-techniques.md`.
 
@@ -23,7 +23,7 @@ scripts/uninstall.sh  # stop and remove (keeps the database)
 
 Then grant Accessibility to "Time Tracker" in System Settings → Privacy & Security → Accessibility.
 
-Logs: `log stream --predicate 'subsystem == "timetracker.tracker"'`
+Logs: `/usr/bin/log stream --predicate 'subsystem == "timetracker.tracker"' --info` (`/usr/bin/log`, since zsh has a `log` builtin that shadows it; `--info` to include info messages). Past logs: `/usr/bin/log show --last 1h --info --predicate …`
 
 For a quick test without installing: `ALLOW_ADHOC=1 scripts/build.sh`, copy `build/TimeTracker.app/Contents/MacOS/TimeTracker` out of the bundle, and run it with `TIMETRACKER_DB=/some/test.db`. Run from a terminal it gets the terminal's permissions, not its own, so titles stay empty; and run inside the bundle it would show the Accessibility prompt. Only one tracker can record to a given database (lock file `<db>.lock`); a second one exits.
 

@@ -30,7 +30,7 @@ struct WebPage {
 ///
 /// Only for allowlisted apps, because it has a cost: Electron apps build their web
 /// Accessibility tree only after we switch it on, and then keep it up to date on every page
-/// change until they quit. See notes/tracking-techniques.md.
+/// change until they quit. See notes/electron-and-claude.md.
 ///
 /// We never switch the tree back off: we can't tell whether something else started relying on
 /// it while we ran (see TODO "Tracker: Accessibility tree in other apps" in notes/PLAN.md).
@@ -113,7 +113,18 @@ final class WebAreaReader {
         guard let url = webArea.url(AXName.url), isContent(url, bundlePath: bundlePath) else {
             return nil
         }
-        return WebPage(element: webArea, url: url.absoluteString, title: webArea.string(kAXTitleAttribute))
+        return WebPage(element: webArea, url: withoutFragment(url), title: webArea.string(kAXTitleAttribute))
+    }
+
+    /// Drops the `#…` part: it's usually a position within the page (Notion's `#<block-id>`),
+    /// which would split rows without saying anything about what's being worked on, and it can
+    /// carry secrets (`#access_token=…`). See "URL fragments" in notes/PLAN.md.
+    private static func withoutFragment(_ url: URL) -> String {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false), components.fragment != nil else {
+            return url.absoluteString
+        }
+        components.fragment = nil
+        return components.string ?? url.absoluteString
     }
 
     /// Pages loaded from the app's own bundle are its UI, not content: Electron's

@@ -1,6 +1,6 @@
 # Tracking techniques
 
-How the tracker gets its data on macOS, what each technique costs, and what we've learned about specific apps. Decisions and TODOs live in [PLAN.md](PLAN.md); this file is the reference.
+How the tracker gets its data on macOS, what each technique costs, and what we've learned about specific apps. Decisions and TODOs live in [PLAN.md](PLAN.md); Electron and Claude specifics in [electron-and-claude.md](electron-and-claude.md); this file is the reference.
 
 ## Hard requirement: no keylogging
 
@@ -59,19 +59,12 @@ For reference, ActivityWatch's defaults: window watcher polls every 1 s, AFK wat
 - **TextEdit, Preview** and most document-based Cocoa apps: full `file://` URL (stored as a path).
 - **Finder:** has the attribute, leaves it empty. The folder is available through Apple Events (`target of front window`).
 - **IntelliJ IDEA:** has the attribute, leaves it empty. The window title is `project – file` (e.g. `timetracker – .gitignore`).
-- **Firefox, Claude:** no path.
+- **VS Code:** full `file://` URL of the open file (empty on non-file tabs such as Welcome or release notes). With a folder open, the window title is `<tab> — <folder name>` (e.g. `build.sbt — HeartAI`), but the folder's path isn't reported anywhere; its `window.title` setting can add it (`${rootPath}`).
+- **Firefox, Claude, Notion, Slack, Obsidian:** no path.
 
-### Claude desktop app (`com.anthropic.claudefordesktop`)
+### Claude desktop app and other Electron apps
 
-- Electron. The window title is always "Claude", except windows opened by cmd-clicking a session, which are titled with the conversation name. In such a window the tracker found no page URL / title (6.8 s row); cause not known yet.
-- `AXDocument` is empty, so no path.
-- With `AXManualAccessibility` on, the focused window contains three `AXWebArea`s, found 7 levels below the window: two `file://…/Claude.app/…/app.asar/…` ones are the app's own UI (main window shell, find bar), and one `https://claude.ai/…` page whose `AXTitle` is the conversation title (`… - Claude Code`, `… - Claude`) and whose `AXURL` identifies it:
-  - Claude Code session: `https://claude.ai/epitaxy/local_<session-id>`
-  - Regular chat: `https://claude.ai/chat/<uuid>`; new chat: `https://claude.ai/new`
-- The page's tree also shows the session's environment (e.g. "⏰ TIME TRACKER", in "Activity panel" → "Environment") and folder (popup button "timetracker ~/code/canvas"), ~750 elements deep. We prefer not to scrape that: the files below give the same, more reliably.
-- The browser pane inside a Claude Code session is a nested web view; the tracker doesn't descend into web areas, so its URLs aren't seen (time stays on the session).
-- **Session metadata on disk** (undocumented, read-only use): `~/Library/Application Support/Claude/claude-code-sessions/<account-id>/<org-id>/local_<session-id>.json`, named after the ID in the page URL. Contains `cliSessionId` (the Claude Code transcript ID, as in `~/.claude/projects/<project>/<cliSessionId>.jsonl`), `cwd`, `title`, `createdAt`, `lastActivityAt`, `lastFocusedAt`, `envScopeId`. `~/Library/Application Support/Claude/ccd-session-presets.json` maps `envScopeId` to the environment's `name` (e.g. "⏰ TIME TRACKER").
-- **Claude Code hooks** (`SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd`, …) get JSON with `session_id`, `cwd`, `transcript_path`. They report activity in a session, not which one is visible, and only cover Claude Code sessions.
+See [electron-and-claude.md](electron-and-claude.md): how Electron windows are built, switching the web tree on, finding the content page, Claude's page URLs and titles, its session files, and known gaps.
 
 ### Firefox
 
@@ -79,13 +72,10 @@ For reference, ActivityWatch's defaults: window watcher polls every 1 s, AFK wat
 
 ## Turning on an app's web Accessibility tree
 
-- **Electron:** set `AXManualAccessibility = true` on the app element. Designed for this; avoids side effects on window animations.
+- **Electron:** `AXManualAccessibility = true` on the app element. Details, and how the tracker picks the content page: [electron-and-claude.md](electron-and-claude.md).
 - **Firefox / Chromium:** `AXEnhancedUserInterface = true`. Known side effect: window move / resize animations become slow and janky; window managers (Rectangle etc.) switch it off temporarily while moving windows.
-- The tree is built lazily: the first reads right after switching it on can come back empty.
-- Claude (likely all Electron apps) reports `AXManualAccessibility` as false even while the tree is on, so reading the flag tells nothing.
-- **Which web areas are content:** the tracker skips pages loaded from the app's own bundle (URL path inside the `.app`, whatever the scheme: Electron's `file://…/app.asar/…`, VS Code's `vscode-file://vscode-app/…`) and `about:` placeholders. Everything else counts. One content page → that's it; several → the one holding keyboard focus; none of them focused → no URL. The search never descends into a web area.
-- It stays on until the app quits. The tracker currently never switches it off (see PLAN.md, TODO "Tracker: Accessibility tree in other apps").
-- To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> <output-file>` writes the tracker's page search on each window (elements visited, time, web areas found), then the focused window's attributes and tree (must run via `open` so it gets the tracker's own Accessibility permission).
+- Either way the tree stays on until the app quits; the tracker never switches it off (see PLAN.md, TODO "Tracker: Accessibility tree in other apps").
+- To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> <output-file>` (see [electron-and-claude.md](electron-and-claude.md)).
 
 ## Gotchas
 

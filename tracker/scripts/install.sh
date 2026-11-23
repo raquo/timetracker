@@ -41,4 +41,4 @@ EOF
 
 launchctl bootstrap "$DOMAIN" "$LAUNCH_AGENT"
 echo "Installed $INSTALL_APP and started LaunchAgent $BUNDLE_ID"
-echo "Logs: log stream --predicate 'subsystem == \"timetracker.tracker\"'"
+echo "Logs: /usr/bin/log stream --info --predicate 'subsystem == \"timetracker.tracker\"'"
