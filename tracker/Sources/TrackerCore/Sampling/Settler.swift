@@ -6,6 +6,9 @@
 /// settling delays the write but doesn't move boundaries. A state that never settles (a title
 /// ticking every second) is recorded as last seen once `maxSettleMs` has passed.
 ///
+/// A change seen before a gap in sampling (sleep, a hang, a suspended process) isn't carried
+/// across it: after the gap it counts as first seen again, so its row can't span the gap.
+///
 /// Confined to the tracker's queue.
 final class Settler {
     /// How long after a change to sample again.
@@ -13,8 +16,10 @@ final class Settler {
     /// Two samples closer than this don't confirm each other: both may be mid-change.
     static let minConfirmGapMs: Int64 = 250
     static let maxSettleMs: Int64 = 3_000
+    /// Samples further apart than this have a gap between them (see `Recorder.maxGapMs`).
+    static let maxGapMs = Recorder.maxGapMs
 
-    enum Decision {
+    enum Decision: Equatable {
         /// Record the sample. If it starts a new row, the row starts at `changedAtMs`.
         case record(changedAtMs: Int64)
         /// Don't record yet; sample again after `resampleDelayMs`.
@@ -25,14 +30,23 @@ final class Settler {
         let snapshot: Snapshot
         /// The first sample that differed from the recorded row.
         let firstSeenMs: Int64
-        /// The latest sample with `snapshot`.
+        /// The first sample with `snapshot`: equal samples after it don't move it, so two
+        /// confirm each other only if they're far enough apart.
         let sampledAtMs: Int64
     }
 
     private var pending: Pending?
+    private var lastSampleMs: Int64?
 
     /// `recorded`: the snapshot of the open row, nil when there is none.
     func decide(_ snapshot: Snapshot, atMs nowMs: Int64, recorded: Snapshot?) -> Decision {
+        defer {
+            lastSampleMs = nowMs
+        }
+        if let lastSampleMs, nowMs - lastSampleMs > Self.maxGapMs {
+            // A change seen before the gap isn't carried across it.
+            pending = nil
+        }
         if snapshot == recorded {
             // Unchanged, or a change that reverted before it was confirmed.
             pending = nil

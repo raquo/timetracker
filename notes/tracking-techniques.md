@@ -33,7 +33,7 @@ In short: window-level Accessibility is the cheap baseline for every app; page-c
 | Page URL / title in web content | Electron: `AXManualAccessibility` on the app first. Then `AXWebArea` → `AXURL`, `AXTitle` (or `AXDescription`) | Accessibility | recorded for apps where probing found content pages (browsers, Claude, …; see PLAN.md "Adaptive page reading") |
 | Safari / Chromium URL, alternative | Apple Events: `URL` and `title` of `active tab of front window`, with a timeout, off the main thread | Automation (per browser) | not needed so far |
 | Idle | `CGEventSource.secondsSinceLastEventType(.combinedSessionState, anyInputEventType)` | none | recorded |
-| Lock / sleep / wake | `NSWorkspace` `willSleep` / `didWake`; `com.apple.screenIsLocked` / `screenIsUnlocked` distributed notifications | none | recorded |
+| Lock / sleep / wake | `NSWorkspace` `willSleep` / `didWake`; `com.apple.screenIsLocked` / `screenIsUnlocked` distributed notifications; at startup, `CGSessionCopyCurrentDictionary` (`CGSSessionScreenIsLocked`) | none | recorded |
 | Video / call while idle | Power assertions: `IOPMCopyAssertionsByProcess`, look for `PreventUserIdleDisplaySleep` | none | planned |
 | Camera / mic in use | CoreMediaIO `kCMIODevicePropertyDeviceIsRunningSomewhere`; CoreAudio `kAudioDevicePropertyDeviceIsRunningSomewhere` | none | planned |
 
@@ -42,7 +42,7 @@ In short: window-level Accessibility is the cheap baseline for every app; page-c
 - **Events:** app activation (`NSWorkspace`); focused window changed and window title changed (`AXObserver` on the frontmost app); for apps whose pages are read also keyboard focus moving (`AXFocusedUIElementChanged`) and the page's title changes / `AXLoadComplete`; lock, unlock, sleep, wake. Bursts coalesced over 300 ms.
 - **Clicks:** a global `leftMouseUp` monitor schedules a sample 600 ms later, giving the app time to react (e.g. switching to the clicked conversation). Catches changes that send no Accessibility event. Needs the Accessibility permission. Only the fact of a click is used.
 - **Poll:** every 5 s as a backstop (idle transitions, URL-only changes).
-- **Settling:** a sample that differs from the open row is held back and the tracker samples again 400 ms later; the change is recorded once two samples at least 250 ms apart agree, starting at the time it was first seen. A change that reverts before that is dropped; one that never settles is recorded as last seen after 3 s. Prevents rows like one tab's title with another tab's URL.
+- **Settling:** a sample that differs from the open row is held back and the tracker samples again 400 ms later; the change is recorded once two samples at least 250 ms apart agree, starting at the time it was first seen. A change that reverts before that is dropped; one that never settles is recorded as last seen after 3 s. A change still settling when sampling stops for over 20 s (sleep, a hang) counts as first seen again after the gap, so its row can't span it. Prevents rows like one tab's title with another tab's URL.
 - An unchanged sample only extends the open row in memory; it's flushed to disk every 30 s. So sampling frequency doesn't add rows; changes do.
 - Before closing on quit (SIGTERM) or sleep, the tracker takes one last sample, so the time since the last poll isn't lost.
 

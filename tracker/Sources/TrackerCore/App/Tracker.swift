@@ -92,6 +92,12 @@ final class Tracker {
             self.queue.async { self.scheduleTick(.click) }
         }
 
+        // Started while locked (launchd relaunching after a crash): no lock notification comes
+        // then, only the unlock one. Queued before the timer, so the first sample sees it.
+        queue.async { [self] in
+            isScreenLocked = Self.isScreenLockedNow()
+        }
+
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now(), repeating: .seconds(Self.pollIntervalSeconds), leeway: .milliseconds(250))
         timer.setEventHandler { [weak self] in self?.tick() }
@@ -163,6 +169,14 @@ final class Tracker {
         catch {
             log.failure("close interval", error)
         }
+    }
+
+    /// Whether the screen is locked right now, from the login session's state.
+    private static func isScreenLockedNow() -> Bool {
+        guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else {
+            return false
+        }
+        return (session["CGSSessionScreenIsLocked"] as? Bool) ?? false
     }
 
     /// Whether we have the Accessibility permission. Logs when that changes.

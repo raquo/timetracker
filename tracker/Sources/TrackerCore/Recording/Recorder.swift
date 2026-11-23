@@ -62,21 +62,36 @@ final class Recorder {
             }
             else {
                 // The old state held at least until its last sample.
-                var boundaryMs = min(nowMs, max(current.endMs, changedAtMs))
-                // Going idle: the idle stretch really started at the last input, so backdate the boundary.
+                let boundaryMs = min(nowMs, max(current.endMs, changedAtMs))
+                // Going idle: the idle stretch really started at the last input, so the old row
+                // ends there. If something else changed too, the old state stayed on screen,
+                // idle, until the change was seen: that gets a row of its own.
+                var oldEndMs = boundaryMs
+                var idleOld: Snapshot? = nil
                 if snapshot.isIdle, !current.snapshot.isIdle, let idleSinceMs {
-                    boundaryMs = min(boundaryMs, max(current.startMs, idleSinceMs))
+                    oldEndMs = min(boundaryMs, max(current.startMs, idleSinceMs))
+                    var wentIdle = current.snapshot
+                    wentIdle.isIdle = true
+                    if wentIdle != snapshot, oldEndMs < boundaryMs {
+                        idleOld = wentIdle
+                    }
                 }
                 // Close first, on its own. If this throws, `open` is kept and the next sample retries.
-                if boundaryMs <= current.startMs {
+                if oldEndMs <= current.startMs {
                     try store.delete(rowID: current.rowID)
                 }
                 else {
-                    try store.setEnd(boundaryMs, rowID: current.rowID)
+                    try store.setEnd(oldEndMs, rowID: current.rowID)
                 }
-                watermarkMs = max(watermarkMs, boundaryMs)
+                watermarkMs = max(watermarkMs, oldEndMs)
                 open = nil
-                open = try insert(snapshot, startMs: boundaryMs, endMs: nowMs)
+                var newStartMs = oldEndMs
+                if let idleOld {
+                    _ = try store.insert(idleOld, startMs: oldEndMs, endMs: boundaryMs)
+                    watermarkMs = max(watermarkMs, boundaryMs)
+                    newStartMs = boundaryMs
+                }
+                open = try insert(snapshot, startMs: newStartMs, endMs: nowMs)
                 return
             }
         }

@@ -29,11 +29,11 @@ The window-level Accessibility data that works for native apps tells little abou
 What `PageSearch` does on every sample of an app whose pages are read, and on each probe ("Adaptive page reading" in [PLAN.md](PLAN.md)) ([PageSearch.swift](../tracker/Sources/TrackerCore/PageReading/PageSearch.swift)):
 
 1. Search the focused window for `AXWebArea` elements: depth-first through `AXChildren`, **never descending into a web area or an `AXToolbar`** (a browser's tab strip), up to 150 elements (500 before 2026-11-23). So it only walks the native wrappers around the pages, not the pages' content.
-2. Read each web area's `AXURL` (reported as a CFURL or a string). Skip the app's own UI and placeholders:
+2. Read each web area's `AXURL` (reported as a CFURL or a string). Skip only what's certainly not content (see "Record more" in PLAN.md):
    - pages loaded from inside the app's bundle (the URL's path is inside the `.app`, whatever the scheme: Electron's `file://…/app.asar/…`, VS Code's `vscode-file://vscode-app/…/Visual Studio Code.app/…`)
-   - `about:` pages (`about:blank`)
-   - everything else counts, including local `file://` documents and custom schemes.
-3. One content page left → record its URL (scrubbed, see PLAN.md) and `AXTitle` (the document's `<title>`; Firefox and Safari leave it empty and put it in `AXDescription`). Several → the one holding keyboard focus (walk `AXParent` up from the app's `AXFocusedUIElement` to a web area). None of them focused, or no content page → no URL (rather none than the wrong one).
+   - `about:blank`, an empty placeholder
+   - everything else counts: local `file://` documents, custom schemes, browsers' own pages (`chrome://new-tab-page/`, `about:newtab`; until 2026-11-23 all `about:` pages were skipped).
+3. One content page left → record its URL (scrubbed, see PLAN.md) and `AXTitle` (the document's `<title>`; Firefox and Safari leave it empty and put it in `AXDescription`). Several → the one holding keyboard focus (walk `AXParent` up from the app's `AXFocusedUIElement` until one of the pages; past iframes, which are web areas of their own: Google Docs types into one). None of them focused, or no content page → no URL (rather none than the wrong one).
 
 **Cost (verified, Claude, 2026-11-22):** the search visits 20 elements, about 44 calls in all (role and children per element, then URL and title), 4–17 ms per sample, median ~8 ms. The same while Claude streams a long reply. Each call is a round trip to the app's process; Electron answers them in its main (browser) process, not the page's renderer **(inferred)**. So the tracker searches afresh on every sample instead of caching the page element, which also rules out reporting a page that's no longer shown. Apps with a bigger UI around their pages could cost more (up to 150 elements); the dump tool measures it.
 
@@ -104,7 +104,7 @@ With probing (since 2026-11-23) the allowlist is gone: Slack and Obsidian will p
 | VS Code (`com.microsoft.VSCode`) | `vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/…/workbench.html`, inside the bundle, so skipped | No URL. Its "Release Notes" tab is a `vscode-webview://…` web area nested inside the workbench (twice), which the search doesn't descend into. But with a file open, **`AXDocument` has the file's full path**, recorded already (window-level, for every app); the window title is the file name. Switching its tree on triggers a "screen reader detected" popup | Off (also probing's result): the window gives title and path, and the tree would keep VS Code thinking a screen reader is running. Choosing off before its first probe avoids the popup |
 
 Lessons:
-- **Local UI under a custom scheme** (`app://`, like Obsidian) passes the "not loaded from the bundle" rule. Harmless (a constant URL), but it's a sign the app has nothing for us in its web tree. If more such apps come up, also skip custom schemes whose host names the app itself (`app://obsidian.md`).
+- **Local UI outside the bundle counts as content:** under a custom scheme (Obsidian's `app://obsidian.md`) or even over https (Zoom's home screen, `https://new-home-page.localhost/index.html`, seen 2026-11-23). Harmless (a constant URL), but the app gets "on" for nothing. Zoom rules out fixing this by scheme or host; see the refinement TODO in PLAN.md.
 - **Editors' embedded views** (VS Code webviews, the Claude Code browser pane) are nested web areas. Not seen, by design.
 - **Most apps put what matters in the window title.** Page reading only adds something in apps whose title doesn't say what's open (Claude) or where URL IDs add something rules need (Notion page IDs, Slack channel IDs). Probing turns it on wherever a content page shows, more widely than that; the "on" condition may be refined (TODO in [PLAN.md](PLAN.md)).
 

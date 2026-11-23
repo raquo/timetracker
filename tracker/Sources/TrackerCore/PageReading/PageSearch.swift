@@ -29,13 +29,13 @@ enum PageSearch {
     /// The page in use among `pages`, or nil when there is none, or several and we can't tell
     /// which one is in use (consistency: rather no URL than the wrong one). `app`: the app
     /// element, to find the keyboard focus.
-    static func choose<Node: AccessibilityNode>(from pages: [WebPage<Node>], app: Node, bundlePath: String?) -> WebPage<Node>? where Node.Element == Node {
+    static func choose<Node: AccessibilityNode>(from pages: [WebPage<Node>], app: Node) -> WebPage<Node>? where Node.Element == Node {
         if pages.count == 1 {
             return pages[0]
         }
-        else if pages.count > 1, let focused = focusedWebArea(app: app, bundlePath: bundlePath) {
+        else if pages.count > 1 {
             // Several pages (e.g. split view): use the one holding keyboard focus.
-            return pages.first { $0.element == focused }
+            return pageHoldingFocus(pages, app: app)
         }
         else {
             return nil
@@ -78,11 +78,16 @@ enum PageSearch {
         return WebPage(element: webArea, url: scrubbed, title: title)
     }
 
-    /// Pages loaded from the app's own bundle are its UI, not content: Electron's
-    /// `file://…/Claude.app/…/app.asar/…`, VS Code's `vscode-file://vscode-app/…/Visual Studio Code.app/…`.
-    /// `about:` pages (`about:blank`) are placeholders. Anything else counts, whatever the scheme.
+    /// Every page counts except two that are certainly not content (see "Record more" in
+    /// notes/PLAN.md):
+    /// - pages loaded from the app's own bundle, whatever the scheme: its UI (Electron's
+    ///   `file://…/Claude.app/…/app.asar/…`, VS Code's `vscode-file://vscode-app/…/Visual Studio Code.app/…`);
+    /// - `about:blank`, an empty placeholder (Firefox's Picture-in-Picture player).
+    /// So browsers' own pages count (`chrome://new-tab-page/`, `about:newtab`, `about:preferences`),
+    /// and so do app-private schemes outside the bundle (Obsidian's `app://obsidian.md/…`).
     static func isContent(_ url: URL, bundlePath: String?) -> Bool {
-        if url.absoluteString.isEmpty || url.scheme == "about" {
+        let address = url.absoluteString.prefix { $0 != "?" && $0 != "#" }.lowercased()
+        if address.isEmpty || address == "about:blank" {
             return false
         }
         else if let bundlePath, url.scheme != "http", url.scheme != "https", url.path.hasPrefix(bundlePath + "/") {
@@ -93,15 +98,17 @@ enum PageSearch {
         }
     }
 
-    /// The content web area that holds keyboard focus, found by walking up from the focused element.
-    private static func focusedWebArea<Node: AccessibilityNode>(app: Node, bundlePath: String?) -> Node? where Node.Element == Node {
+    /// The page among `pages` that holds keyboard focus, found by walking up from the focused
+    /// element. Walks past other web areas on the way: focus is often in an iframe within the
+    /// page (Google Docs types into one), and an iframe is a web area of its own.
+    private static func pageHoldingFocus<Node: AccessibilityNode>(_ pages: [WebPage<Node>], app: Node) -> WebPage<Node>? where Node.Element == Node {
         var element = app.focusedUIElement
         for _ in 0..<maxParentHops {
             guard let current = element else {
                 return nil
             }
-            if current.role == AXName.webAreaRole, contentPage(current, bundlePath: bundlePath) != nil {
-                return current
+            if let page = pages.first(where: { $0.element == current }) {
+                return page
             }
             element = current.parent
         }

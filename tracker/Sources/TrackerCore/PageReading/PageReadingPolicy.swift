@@ -32,7 +32,9 @@ final class PageReadingPolicy {
     private struct LastSample {
         let app: AppIdentity
         let atMs: Int64
-        /// Active, and the app was being probed and had a window to probe.
+        /// Active, and the app was being probed (probed this run, still undecided after this
+        /// sample) and had a window to probe. So the sample that decides doesn't count towards
+        /// a later re-probe.
         let isCounted: Bool
     }
 
@@ -157,7 +159,9 @@ final class PageReadingPolicy {
                 decide(last.app, hasContentPages: false, atMs: nowMs)
             }
         }
-        lastSample = app.map { LastSample(app: $0, atMs: nowMs, isCounted: isActive && hasProbeableWindow && mode == .probing) }
+        lastSample = app.map { app in
+            LastSample(app: app, atMs: nowMs, isCounted: isActive && hasProbeableWindow && mode == .probing && probedApps.contains(app))
+        }
     }
 
     /// Only after at least one probe of `app` (`noteProbe`).

@@ -63,6 +63,7 @@ To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --arg
   - `Privacy/`: `URLScrubber`.
   - `Apps/`: app-specific code (`Claude.swift`; `Browsers.swift`, not used yet). `Diagnostics/`: the `--dump-ax` tool.
 - `Tests/TrackerCoreTests/`: `swift test` (Swift Testing; works with the Command Line Tools, no Xcode needed).
+  `Support/` holds a temporary migrated database and harnesses that drive `Recorder` (directly, or through `Settler` like `Tracker.tick`) and `PageReadingPolicy` (like `Sampler`) with times relative to `t0`. Tests compare whole stored rows, read back with lookups resolved, and every read checks that rows never overlap. `RecorderHarness.closeInterval` takes a last sample before closing, like `Tracker.closeInterval`. `FakeNode` is a hand-built Accessibility element, so `PageSearch` runs without a live app. Failed writes are simulated with a TEMP trigger that raises an error (`TempDatabase.failWrites`), so no mocks. Use `withKnownIssue` to pin a known gap (stating the wanted result), so fixing it shows up as a test to update.
 
 Seams for tests: the pure parts take time as `atMs` arguments (`Settler`, `Recorder`, `PageReadingPolicy`) and run on a temporary SQLite file; `PageSearch` runs on any `AccessibilityNode`, so on recorded trees as well as live `AXUIElement`s. `Sampler`, `Tracker` and `WindowObserver` talk to macOS directly and are left to end-to-end runs.
 

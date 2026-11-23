@@ -105,7 +105,7 @@ final class Sampler {
             if mode == .probing {
                 pageReading.noteProbe(app: app, pid: pid, window: window, hasContentPages: !pages.isEmpty, atMs: nowMs)
             }
-            return PageSearch.choose(from: pages, app: appElement, bundlePath: bundlePath)
+            return PageSearch.choose(from: pages, app: appElement)
         }
     }
 
