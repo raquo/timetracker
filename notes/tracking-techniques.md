@@ -30,7 +30,7 @@ In short: window-level Accessibility is the cheap baseline for every app; page-c
 | Window title | `AXFocusedWindow` → `AXTitle` | Accessibility | recorded |
 | Window kind | `AXRole`, `AXSubrole`, `AXMain`, `AXFullScreen` on the focused window | Accessibility | recorded |
 | Document / file path | `AXDocument` on the focused window | Accessibility | recorded where apps report it (see below) |
-| Page URL / title in web content | Electron: `AXManualAccessibility` on the app first. Then `AXWebArea` → `AXURL`, `AXTitle` (or `AXDescription`) | Accessibility | recorded for browsers (Firefox, Safari, Chromium family) and allowlisted apps (Claude) |
+| Page URL / title in web content | Electron: `AXManualAccessibility` on the app first. Then `AXWebArea` → `AXURL`, `AXTitle` (or `AXDescription`) | Accessibility | recorded for apps where probing found content pages (browsers, Claude, …; see PLAN.md "Adaptive page reading") |
 | Safari / Chromium URL, alternative | Apple Events: `URL` and `title` of `active tab of front window`, with a timeout, off the main thread | Automation (per browser) | not needed so far |
 | Idle | `CGEventSource.secondsSinceLastEventType(.combinedSessionState, anyInputEventType)` | none | recorded |
 | Lock / sleep / wake | `NSWorkspace` `willSleep` / `didWake`; `com.apple.screenIsLocked` / `screenIsUnlocked` distributed notifications | none | recorded |
@@ -39,7 +39,7 @@ In short: window-level Accessibility is the cheap baseline for every app; page-c
 
 ## When the tracker samples
 
-- **Events:** app activation (`NSWorkspace`); focused window changed and window title changed (`AXObserver` on the frontmost app); for allowlisted apps also keyboard focus moving (`AXFocusedUIElementChanged`) and the page's title changes / `AXLoadComplete`; lock, unlock, sleep, wake. Bursts coalesced over 300 ms.
+- **Events:** app activation (`NSWorkspace`); focused window changed and window title changed (`AXObserver` on the frontmost app); for apps whose pages are read also keyboard focus moving (`AXFocusedUIElementChanged`) and the page's title changes / `AXLoadComplete`; lock, unlock, sleep, wake. Bursts coalesced over 300 ms.
 - **Clicks:** a global `leftMouseUp` monitor schedules a sample 600 ms later, giving the app time to react (e.g. switching to the clicked conversation). Catches changes that send no Accessibility event. Needs the Accessibility permission. Only the fact of a click is used.
 - **Poll:** every 5 s as a backstop (idle transitions, URL-only changes).
 - **Settling:** a sample that differs from the open row is held back and the tracker samples again 400 ms later; the change is recorded once two samples at least 250 ms apart agree, starting at the time it was first seen. A change that reverts before that is dropped; one that never settles is recorded as last seen after 3 s. Prevents rows like one tab's title with another tab's URL.

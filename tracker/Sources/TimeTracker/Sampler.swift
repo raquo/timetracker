@@ -16,7 +16,8 @@ struct Snapshot: Equatable {
     var isMainWindow: Bool? = nil
     var isFullScreen: Bool? = nil
     var documentPath: String? = nil
-    /// URL and title of the page in the focused window's web content (allowlisted apps only).
+    /// URL and title of the page in the focused window's web content (apps whose pages are read,
+    /// see `PageReadingPolicy`).
     var url: String? = nil
     var pageTitle: String? = nil
     var isIdle = false
@@ -29,8 +30,8 @@ struct Sample {
     /// When `snapshot.isIdle`: the time of the last user input.
     let idleSinceMs: Int64?
     let frontmostPID: pid_t?
-    /// Whether the frontmost app is on the web content allowlist.
-    let isWebContentApp: Bool
+    /// Whether the frontmost app's pages are read (page reading is on), so its pages need watching.
+    let isReadingPages: Bool
     /// The page element `snapshot.url` was read from, to watch for changes.
     let pageElement: AXUIElement?
 }
@@ -43,28 +44,42 @@ final class Sampler {
     private static let anyInputEventType = CGEventType(rawValue: ~0)!
 
     private let webAreas = WebAreaReader()
+    private let pageReading: PageReadingPolicy
+
+    init(pageReading: PageReadingPolicy) {
+        self.pageReading = pageReading
+    }
 
     func sample(nowMs: Int64, isScreenLocked: Bool, isAxTrusted: Bool) -> Sample {
         if isScreenLocked {
+            pageReading.noteSample(app: nil, mode: .off, isActive: false, atMs: nowMs)
             return Sample(
                 snapshot: Snapshot(isScreenLocked: true),
                 idleSinceMs: nil,
                 frontmostPID: nil,
-                isWebContentApp: false,
+                isReadingPages: false,
                 pageElement: nil
             )
         }
+        pageReading.refresh()
         var snapshot = Snapshot()
         var page: WebPage?
         let frontmost = NSWorkspace.shared.frontmostApplication
-        let isWebContentApp = webAreas.isEnabled(for: frontmost?.bundleIdentifier)
+        let identity = AppIdentity(bundleID: frontmost?.bundleIdentifier, executablePath: frontmost?.executableURL?.path)
+        let mode = identity.map(pageReading.mode(for:)) ?? .off
         if let app = frontmost {
             snapshot.bundleID = app.bundleIdentifier
             snapshot.appName = app.localizedName
             snapshot.bundlePath = app.bundleURL?.path
             snapshot.executablePath = app.executableURL?.path
             if isAxTrusted {
-                page = readFocusedWindow(of: app, readPage: isWebContentApp, into: &snapshot)
+                let pid = app.processIdentifier
+                let appElement = AXUIElementCreateApplication(pid)
+                if let window = readFocusedWindow(of: appElement, into: &snapshot), let identity {
+                    page = readPage(mode: mode, app: identity, appElement: appElement, pid: pid, window: window, bundlePath: snapshot.bundlePath, atMs: nowMs)
+                    snapshot.url = page?.url
+                    snapshot.pageTitle = page?.title
+                }
             }
         }
         let idleSeconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: Self.anyInputEventType)
@@ -74,23 +89,46 @@ final class Sampler {
             snapshot.isIdle = true
             idleSinceMs = nowMs - Int64(min(idleSeconds, 365 * 24 * 3600) * 1000)
         }
+        pageReading.noteSample(app: identity, mode: mode, isActive: !snapshot.isIdle, atMs: nowMs)
         return Sample(
             snapshot: snapshot,
             idleSinceMs: idleSinceMs,
             frontmostPID: frontmost?.processIdentifier,
-            isWebContentApp: isWebContentApp,
+            // A probe that found a page has just switched page reading on.
+            isReadingPages: mode == .on || page != nil,
             pageElement: page?.element
         )
     }
 
-    /// Fills in the focused window's attributes. Returns the web page read, if any.
-    private func readFocusedWindow(
-        of runningApp: NSRunningApplication,
-        readPage: Bool,
-        into snapshot: inout Snapshot
+    /// The page to record, per the app's page reading mode. While probing, only a probe that
+    /// finds a page returns it: the app is on from then on, so this sample can use it already.
+    private func readPage(
+        mode: PageReadingMode,
+        app: AppIdentity,
+        appElement: AXUIElement,
+        pid: pid_t,
+        window: AXUIElement,
+        bundlePath: String?,
+        atMs nowMs: Int64
     ) -> WebPage? {
-        let pid = runningApp.processIdentifier
-        let app = AXUIElementCreateApplication(pid)
+        switch mode {
+        case .off:
+            return nil
+        case .on:
+            let pages = webAreas.pages(app: appElement, pid: pid, bundlePath: bundlePath, window: window)
+            return webAreas.choose(from: pages, app: appElement, bundlePath: bundlePath)
+        case .probing:
+            guard pageReading.isProbeDue(pid: pid, window: window, atMs: nowMs) else {
+                return nil
+            }
+            let pages = webAreas.pages(app: appElement, pid: pid, bundlePath: bundlePath, window: window)
+            pageReading.noteProbe(app: app, pid: pid, window: window, hasContentPages: !pages.isEmpty, atMs: nowMs)
+            return webAreas.choose(from: pages, app: appElement, bundlePath: bundlePath)
+        }
+    }
+
+    /// Fills in the focused window's attributes. Returns the window, nil if there is none.
+    private func readFocusedWindow(of app: AXUIElement, into snapshot: inout Snapshot) -> AXUIElement? {
         guard let window = app.focusedWindow else {
             return nil
         }
@@ -108,12 +146,6 @@ final class Sampler {
                 return doc
             }
         }
-        guard readPage, let bundleID = runningApp.bundleIdentifier else {
-            return nil
-        }
-        let page = webAreas.page(app: app, pid: pid, bundleID: bundleID, bundlePath: snapshot.bundlePath, window: window)
-        snapshot.url = page?.url
-        snapshot.pageTitle = page?.title
-        return page
+        return window
     }
 }

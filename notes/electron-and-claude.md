@@ -26,18 +26,18 @@ The window-level Accessibility data that works for native apps tells little abou
 
 ## Finding the content page
 
-What `WebAreaReader` does on every sample of an allowlisted app ([WebAreaReader.swift](../tracker/Sources/TimeTracker/WebAreaReader.swift)):
+What `WebAreaReader` does on every sample of an app whose pages are read, and on each probe ("Adaptive page reading" in [PLAN.md](PLAN.md)) ([WebAreaReader.swift](../tracker/Sources/TimeTracker/WebAreaReader.swift)):
 
-1. Search the focused window for `AXWebArea` elements: depth-first through `AXChildren`, **never descending into a web area or an `AXToolbar`** (a browser's tab strip), up to 500 elements. So it only walks the native wrappers around the pages, not the pages' content.
+1. Search the focused window for `AXWebArea` elements: depth-first through `AXChildren`, **never descending into a web area or an `AXToolbar`** (a browser's tab strip), up to 150 elements (500 before 2026-11-23). So it only walks the native wrappers around the pages, not the pages' content.
 2. Read each web area's `AXURL` (reported as a CFURL or a string). Skip the app's own UI and placeholders:
    - pages loaded from inside the app's bundle (the URL's path is inside the `.app`, whatever the scheme: Electron's `file://…/app.asar/…`, VS Code's `vscode-file://vscode-app/…/Visual Studio Code.app/…`)
    - `about:` pages (`about:blank`)
    - everything else counts, including local `file://` documents and custom schemes.
 3. One content page left → record its URL (scrubbed, see PLAN.md) and `AXTitle` (the document's `<title>`; Firefox and Safari leave it empty and put it in `AXDescription`). Several → the one holding keyboard focus (walk `AXParent` up from the app's `AXFocusedUIElement` to a web area). None of them focused, or no content page → no URL (rather none than the wrong one).
 
-**Cost (verified, Claude, 2026-11-22):** the search visits 20 elements, about 44 calls in all (role and children per element, then URL and title), 4–17 ms per sample, median ~8 ms. The same while Claude streams a long reply. Each call is a round trip to the app's process; Electron answers them in its main (browser) process, not the page's renderer **(inferred)**. So the tracker searches afresh on every sample instead of caching the page element, which also rules out reporting a page that's no longer shown. Apps with a bigger UI around their pages could cost more (up to 500 elements); measure each app with the dump tool before allowlisting it.
+**Cost (verified, Claude, 2026-11-22):** the search visits 20 elements, about 44 calls in all (role and children per element, then URL and title), 4–17 ms per sample, median ~8 ms. The same while Claude streams a long reply. Each call is a round trip to the app's process; Electron answers them in its main (browser) process, not the page's renderer **(inferred)**. So the tracker searches afresh on every sample instead of caching the page element, which also rules out reporting a page that's no longer shown. Apps with a bigger UI around their pages could cost more (up to 150 elements); the dump tool measures it.
 
-**Change events:** page content changes often don't change the window title, so for allowlisted apps the tracker also observes `AXFocusedUIElementChanged` on the app and `AXTitleChanged` / `AXLoadComplete` on the page element. Clicks trigger a sample 600 ms later, which catches the rest (e.g. clicking another conversation).
+**Change events:** page content changes often don't change the window title, so for apps whose pages are read the tracker also observes `AXFocusedUIElementChanged` on the app and `AXTitleChanged` / `AXLoadComplete` on the page element. Clicks trigger a sample 600 ms later, which catches the rest (e.g. clicking another conversation).
 
 **Exploring an app:** `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> <output-file>` reports the page search on each of the app's windows (elements visited, time, web areas found), then dumps the focused window's tree (role, subrole, title, description, value, DOM id, URL per element). Must run via `open` so it gets the tracker's own Accessibility permission. Switches the app's tree on and leaves it on.
 
@@ -89,11 +89,13 @@ Code: [Apps/Claude.swift](../tracker/Sources/TimeTracker/Apps/Claude.swift).
   - Page: `/p/<Title-slug>-<page-id>`; with `#<block-id>` when opened at a block (e.g. from a link). The tracker drops fragments ("URL fragments" in [PLAN.md](PLAN.md)).
   - Database view with a page open in side peek: `/p/<database-id>?v=<view-id>&p=<peeked-page-id>&pm=s`. The window title stays the database's name; only the URL names the peeked page.
 - Desktop tabs: only one web area per window, and the window had many tabs open, so only the active tab's page is attached.
-- Allowlisted since 2026-11-22. Its rows record the page URL, with the `#<block-id>` fragment dropped.
+- Allowlisted on 2026-11-22; since 2026-11-23 found by probing. Its rows record the page URL, with the `#<block-id>` fragment dropped.
 
 ## Slack, Obsidian, VS Code: probed with the dump tool, not allowlisted (verified, 2026-11-22)
 
 All three: one top-level web area per window, 13–14 elements searched, 5–14 ms.
+
+With probing (since 2026-11-23) the allowlist is gone: Slack and Obsidian will probe to on (each shows a content page; Obsidian's says nothing, see the refinement TODO in PLAN.md), VS Code to off, though probing switches its tree on and can bring up its screen reader popup. Set them in `app_page_reading_choice` to override.
 
 | App | Top-level page | What the tracker would record | Verdict |
 |---|---|---|---|
@@ -108,4 +110,4 @@ Lessons:
 
 ## Other Electron apps (not tried yet)
 
-Installed: Arduino IDE (`cc.arduino.IDE2`, maybe served from `http://localhost`), OpenCode (`ai.opencode.desktop`, maybe `localhost` too), Chatbox (`xyz.chatboxapp.app`). Also Discord, if installed later (remote site in a shell, like Slack). Before allowlisting one, run the dump tool on it and check the search cost and which web areas it finds. Any app-specific rule goes into a file under `tracker/Sources/TimeTracker/Apps/`, and its tree switch into `WebContentProfile.known`.
+Installed: Arduino IDE (`cc.arduino.IDE2`, maybe served from `http://localhost`), OpenCode (`ai.opencode.desktop`, maybe `localhost` too), Chatbox (`xyz.chatboxapp.app`). Also Discord, if installed later (remote site in a shell, like Slack). Probing now decides on them by itself; the dump tool shows the search cost and which web areas it finds. Any app-specific rule goes into a file under `tracker/Sources/TimeTracker/Apps/`.

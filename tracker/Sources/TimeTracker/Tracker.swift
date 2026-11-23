@@ -31,7 +31,8 @@ final class Tracker {
 
     private let queue = DispatchQueue(label: "timetracker.tracker")
     private let recorder: Recorder
-    private let sampler = Sampler()
+    private let sampler: Sampler
+    private let pageReading: PageReadingPolicy
     private let settler = Settler()
     private let windowObserver: WindowObserver
     private var timer: DispatchSourceTimer?
@@ -47,6 +48,8 @@ final class Tracker {
 
     init(db: Database) throws {
         recorder = try Recorder(db: db)
+        pageReading = try PageReadingPolicy(db: db)
+        sampler = Sampler(pageReading: pageReading)
         windowObserver = WindowObserver(queue: queue)
         windowObserver.onChange = { [weak self] in
             self?.scheduleTick(.event)
@@ -122,7 +125,7 @@ final class Tracker {
         let isAxTrusted = checkAccessibility()
         let now = nowMs()
         let sample = sampler.sample(nowMs: now, isScreenLocked: isScreenLocked, isAxTrusted: isAxTrusted)
-        windowObserver.observe(pid: sample.frontmostPID, watchFocusedElement: sample.isWebContentApp, isAxTrusted: isAxTrusted)
+        windowObserver.observe(pid: sample.frontmostPID, watchFocusedElement: sample.isReadingPages, isAxTrusted: isAxTrusted)
         windowObserver.watchPage(sample.pageElement)
         switch settler.decide(sample.snapshot, atMs: now, recorded: recorder.openSnapshot) {
         case .record(let changedAtMs):
@@ -153,6 +156,7 @@ final class Tracker {
     private func closeInterval() {
         tick()
         settler.reset()
+        pageReading.saveAll()
         do {
             try recorder.close()
         }

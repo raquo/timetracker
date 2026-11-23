@@ -85,6 +85,48 @@ enum Schema {
         """
         ALTER TABLE tracker_interval ADD COLUMN page_title_id INTEGER REFERENCES tracker_title (id);
         """,
+
+        // 4: what probing found out about each app: whether it shows content pages, so whether
+        // reading them is worth it. No row: not decided yet. The user's choice, which overrides
+        // this, lives in the server's `app_page_reading_choice`. See `PageReadingPolicy`.
+        """
+        CREATE TABLE tracker_app_page_probe (
+            -- The app, as in tracker_app minus app_path: 0 = bundle ID, 1 = executable path.
+            identifier_type   INTEGER NOT NULL CHECK (identifier_type IN (0, 1)),
+            identifier        TEXT NOT NULL,
+            -- 1: a probe saw a content page. 0: none seen in 30 min of active use.
+            has_content_pages INTEGER NOT NULL,
+            -- When this result was decided. A re-probe requested after it starts probing again.
+            probed_at_ms      INTEGER NOT NULL,
+            PRIMARY KEY (identifier_type, identifier)
+        );
+        """,
+
+        // 5: a row from the first probe on, not just once decided, with probe counts, to show
+        // whether and how much an app has been probed. probed_at_ms becomes decided_at_ms.
+        // Rows from 4 were all decided by one probe (count 1 is a guess for any decided off).
+        """
+        CREATE TABLE tracker_app_page_probe_new (
+            identifier_type   INTEGER NOT NULL CHECK (identifier_type IN (0, 1)),
+            identifier        TEXT NOT NULL,
+            -- 1: a probe saw a content page. 0: none seen in 30 min of active use. NULL: not decided yet.
+            has_content_pages INTEGER,
+            -- When has_content_pages was decided. A re-probe requested after it starts probing again.
+            decided_at_ms     INTEGER,
+            -- Probes so far, and when the first and last ran. Saved on the first probe, on a
+            -- decision, and when the tracker quits or the Mac sleeps, not on every probe.
+            probe_count       INTEGER NOT NULL,
+            first_probe_at_ms INTEGER NOT NULL,
+            last_probe_at_ms  INTEGER NOT NULL,
+            PRIMARY KEY (identifier_type, identifier),
+            CHECK ((has_content_pages IS NULL) = (decided_at_ms IS NULL))
+        );
+        INSERT INTO tracker_app_page_probe_new
+            SELECT identifier_type, identifier, has_content_pages, probed_at_ms, 1, probed_at_ms, probed_at_ms
+            FROM tracker_app_page_probe;
+        DROP TABLE tracker_app_page_probe;
+        ALTER TABLE tracker_app_page_probe_new RENAME TO tracker_app_page_probe;
+        """,
     ]
 
     static func migrate(_ db: Database) throws {

@@ -2,7 +2,7 @@
 
 Swift menu-bar-less agent that records raw activity into `~/Library/Application Support/com.raquo.timetracker/timetracker.db`. See `../notes/PLAN.md`, `../notes/tracking-techniques.md` and `../notes/electron-and-claude.md`.
 
-Records now: frontmost app, window title and kind (role, subrole, main, full screen), document path (`AXDocument`), page URL and title in browsers (Firefox, Safari, Chromium family) and allowlisted apps (Claude), idle (≥ 60 s without input, backdated to the last input), screen lock, sleep gaps. URLs are scrubbed before writing (no fragment, credentials or secret-looking query parameters; see `URLScrubber.swift`). A changed sample is recorded only once a second sample ~400 ms later agrees (`Settler.swift`). Not yet: power assertions, camera/mic, menu bar item. Samples on Accessibility events, on clicks, and on a 5 s poll; see `../notes/tracking-techniques.md`.
+Records now: frontmost app, window title and kind (role, subrole, main, full screen), document path (`AXDocument`), page URL and title in apps that show web pages (browsers, Claude, …; found by probing), idle (≥ 60 s without input, backdated to the last input), screen lock, sleep gaps. URLs are scrubbed before writing (no fragment, credentials or secret-looking query parameters; see `URLScrubber.swift`). A changed sample is recorded only once a second sample ~400 ms later agrees (`Settler.swift`). Not yet: power assertions, camera/mic, menu bar item. Samples on Accessibility events, on clicks, and on a 5 s poll; see `../notes/tracking-techniques.md`.
 
 ## One-time setup: signing identity
 
@@ -29,16 +29,28 @@ For a quick test without installing: `ALLOW_ADHOC=1 scripts/build.sh`, copy `bui
 
 ## Page URL and title from app web content
 
-For browsers and allowlisted apps the tracker records the URL and title of the page in the focused window (`url_id`, `page_title_id`), read from the app's web Accessibility tree. Built in: the browsers in `Apps/Browsers.swift` (they expose the shown tab without a switch) and Claude (`com.anthropic.claudefordesktop`, an Electron app whose tree the tracker switches on). Further Electron apps can be added; this costs each app some CPU and memory, so keep the list short.
+The tracker records the URL and title of the page in the focused window (`url_id`, `page_title_id`), read from the app's web Accessibility tree, in apps where that's worth it. Which apps is decided per app (`PageReadingPolicy.swift`, "Adaptive page reading" in `../notes/PLAN.md`):
+
+- **Probing:** an app nobody has decided on gets one search of its focused window on window change and about once a minute, recording no page meanwhile. Electron apps (they ship `Electron Framework.framework`) get their tree switched on first (`AXManualAccessibility`), which costs them some CPU and memory until they quit; browsers and other apps expose their pages without a switch.
+- **Probe result** (`tracker_app_page_probe`): a content page seen → on (page read on every sample, with observers); none seen in 30 min of active use within one run → off. A row appears at an app's first probe (`has_content_pages` NULL until decided), with `probe_count` and first / last probe times, saved on the first probe, on a decision, and on quit / sleep.
+- **Your choice** overrides it: the server-owned table `app_page_reading_choice`, which the tracker only reads, and re-reads when another process writes to the database. Until the server and UI exist, create it by hand:
 
 ```bash
-defaults write com.raquo.timetracker.tracker accessibilityTreeApps -array notion.id   # added to the built-in list
-launchctl kickstart -k gui/$(id -u)/com.raquo.timetracker.tracker   # restart to apply
+sqlite3 ~/Library/Application\ Support/com.raquo.timetracker/timetracker.db <<'SQL'
+CREATE TABLE IF NOT EXISTS app_page_reading_choice (
+    identifier_type         INTEGER NOT NULL,  -- 0 = bundle ID, 1 = executable path
+    identifier              TEXT NOT NULL,
+    page_reading_choice     INTEGER NOT NULL,  -- 0 = auto (probe result), 1 = on, 2 = off
+    reprobe_requested_at_ms INTEGER,           -- newer than the probe result: probe again
+    PRIMARY KEY (identifier_type, identifier)
+);
+INSERT OR REPLACE INTO app_page_reading_choice VALUES (0, 'md.obsidian', 2, NULL);
+SQL
 ```
 
 To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> /tmp/ax.txt`. Writes the tracker's page search on each of the app's windows (elements visited, time, web areas found), then the focused window's Accessibility tree. Switches the app's tree on and leaves it on.
 
-Code layout: `Apps/` holds app-specific code (`Claude.swift`, `Browsers.swift`), `Diagnostics/` the dump tool; the rest is generic.
+Code layout: `Apps/` holds app-specific code (`Claude.swift`; `Browsers.swift`, not used yet), `Diagnostics/` the dump tool; the rest is generic.
 
 ## Look at the data
 
