@@ -16,7 +16,9 @@ let package = Package(
         ),
         .testTarget(
             name: "TrackerCoreTests",
-            dependencies: ["TrackerCore"]
+            dependencies: ["TrackerCore"],
+            // Read from the source tree (`#filePath`), not bundled.
+            exclude: ["Fixtures"]
         ),
     ]
 )

@@ -1,0 +1,133 @@
+{
+  "bundleID" : "org.mozilla.firefoxdeveloperedition",
+  "bundlePath" : "/Applications/Firefox Developer Edition.app",
+  "focusPath" : [
+    0,
+    4,
+    0,
+    0,
+    0
+  ],
+  "live" : {
+    "chosen" : 0,
+    "pages" : [
+      {
+        "title" : "Example Domain",
+        "url" : "https://example.com/"
+      }
+    ],
+    "visited" : 16
+  },
+  "window" : {
+    "attributes" : {
+      "AXFullScreen" : false,
+      "AXMain" : true,
+      "AXRole" : "AXWindow",
+      "AXSubrole" : "AXStandardWindow",
+      "AXTitle" : "Example Domain"
+    },
+    "children" : [
+      {
+        "attributes" : {
+          "AXRole" : "AXGroup",
+          "AXSubrole" : "AXUnknown"
+        },
+        "children" : [
+          {
+            "attributes" : {
+              "AXRole" : "AXToolbar"
+            },
+            "isTrimmed" : true
+          },
+          {
+            "attributes" : {
+              "AXRole" : "AXToolbar"
+            },
+            "isTrimmed" : true
+          },
+          {
+            "attributes" : {
+              "AXRole" : "AXToolbar"
+            },
+            "isTrimmed" : true
+          },
+          {
+            "attributes" : {
+              "AXRole" : "AXToolbar"
+            }
+          },
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup",
+              "AXSubrole" : "AXUnknown"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup",
+                  "AXSubrole" : "AXTabPanel"
+                },
+                "children" : [
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXScrollArea",
+                      "AXSubrole" : "AXUnknown"
+                    },
+                    "children" : [
+                      {
+                        "attributes" : {
+                          "AXDescription" : "Example Domain",
+                          "AXRole" : "AXWebArea",
+                          "AXURL" : "https://example.com/"
+                        },
+                        "isTrimmed" : true
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup",
+              "AXSubrole" : "AXApplicationAlert"
+            }
+          }
+        ]
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXCloseButton"
+        }
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXFullScreenButton"
+        },
+        "children" : [
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXMinimizeButton"
+        }
+      }
+    ]
+  }
+}

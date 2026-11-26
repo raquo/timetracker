@@ -25,8 +25,8 @@ enum Accessibility {
     }
 }
 
-/// The attribute reads that Accessibility tree searches need (`PageSearch`), so they run the
-/// same on live `AXUIElement`s and on recorded trees. `==` is element identity (`CFEqual`).
+/// The attribute reads that reading a window and searching its tree need (`Sampler`,
+/// `PageSearch`), so they run the same on live `AXUIElement`s and on recorded trees (`AXFixture`). `==` is element identity (`CFEqual`).
 ///
 /// `Element` is the type itself. It can't be spelled `Self`: `AXUIElement` is a non-final class.
 /// Generic code states `where Node.Element == Node`.
@@ -35,6 +35,7 @@ protocol AccessibilityNode: Hashable {
 
     /// nil when missing or empty.
     func string(_ attribute: String) -> String?
+    func bool(_ attribute: String) -> Bool?
     func url(_ attribute: String) -> URL?
     func element(_ attribute: String) -> Element?
     func elements(_ attribute: String) -> [Element]

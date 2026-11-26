@@ -1,0 +1,160 @@
+{
+  "bundleID" : "org.mozilla.firefoxdeveloperedition",
+  "bundlePath" : "/Applications/Firefox Developer Edition.app",
+  "live" : {
+    "pages" : [
+
+    ],
+    "visited" : 23
+  },
+  "window" : {
+    "attributes" : {
+      "AXFullScreen" : false,
+      "AXMain" : true,
+      "AXRole" : "AXWindow",
+      "AXSubrole" : "AXStandardWindow",
+      "AXTitle" : "Picture-in-Picture"
+    },
+    "children" : [
+      {
+        "attributes" : {
+          "AXRole" : "AXGroup",
+          "AXSubrole" : "AXUnknown"
+        },
+        "children" : [
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup",
+              "AXSubrole" : "AXUnknown"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXScrollArea",
+                  "AXSubrole" : "AXUnknown"
+                },
+                "children" : [
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXWebArea",
+                      "AXURL" : "about:blank"
+                    },
+                    "isTrimmed" : true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup",
+              "AXSubrole" : "AXApplicationGroup"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXButton"
+                }
+              },
+              {
+                "attributes" : {
+                  "AXRole" : "AXButton"
+                }
+              },
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup",
+                  "AXSubrole" : "AXApplicationGroup"
+                }
+              },
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup",
+                  "AXSubrole" : "AXApplicationGroup"
+                },
+                "children" : [
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXSlider"
+                    }
+                  },
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXGroup",
+                      "AXSubrole" : "AXApplicationGroup"
+                    },
+                    "children" : [
+                      {
+                        "attributes" : {
+                          "AXRole" : "AXStaticText",
+                          "AXSubrole" : "AXUnknown"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXButton"
+                    }
+                  },
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXButton"
+                    }
+                  },
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXButton"
+                    }
+                  },
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXButton"
+                    }
+                  },
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXButton"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXCloseButton"
+        }
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXZoomButton"
+        },
+        "children" : [
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXMinimizeButton"
+        }
+      }
+    ]
+  }
+}

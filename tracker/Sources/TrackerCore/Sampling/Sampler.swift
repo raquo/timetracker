@@ -58,7 +58,7 @@ final class Sampler {
         if let frontmost, isAxTrusted {
             let pid = frontmost.processIdentifier
             let appElement = AXUIElementCreateApplication(pid)
-            if let window = readFocusedWindow(of: appElement, into: &snapshot), let identity {
+            if let window = Self.readFocusedWindow(of: appElement, into: &snapshot), let identity {
                 hasProbeableWindow = true
                 page = readPage(mode: mode, app: identity, appElement: appElement, pid: pid, window: window, bundlePath: snapshot.bundlePath, atMs: nowMs)
                 snapshot.url = page?.url
@@ -110,7 +110,7 @@ final class Sampler {
     }
 
     /// Fills in the focused window's attributes. Returns the window, nil if there is none.
-    private func readFocusedWindow(of app: AXUIElement, into snapshot: inout Snapshot) -> AXUIElement? {
+    static func readFocusedWindow<Node: AccessibilityNode>(of app: Node, into snapshot: inout Snapshot) -> Node? where Node.Element == Node {
         guard let window = app.focusedWindow else {
             return nil
         }

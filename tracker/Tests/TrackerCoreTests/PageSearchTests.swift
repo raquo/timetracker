@@ -85,4 +85,28 @@ struct PageSearchTests {
         #expect(PageSearch.choose(from: pages, app: app(s.window, focus: s.addressBar)) == nil)
         #expect(PageSearch.choose(from: pages, app: app(s.window, focus: nil)) == nil)
     }
+
+    /// A window holding `groups` empty groups, then a page.
+    private func pageAfter(groups: Int) -> FakeNode {
+        FakeNode(kAXWindowRole, [:], (0..<groups).map { _ in FakeNode(kAXGroupRole) } + [FakeNode.webArea("https://a.example.com/")])
+    }
+
+    @Test func searchStopsAtItsBudget() {
+        // The window, 148 groups, then the page: the 150th element.
+        let last = PageSearch.webAreas(in: pageAfter(groups: PageSearch.budget - 2))
+        #expect(last.visited == PageSearch.budget)
+        #expect(last.webAreas.map { $0.url(AXName.url)?.absoluteString } == ["https://a.example.com/"])
+        // One more group and the page is past the budget.
+        let past = PageSearch.webAreas(in: pageAfter(groups: PageSearch.budget - 1))
+        #expect(past.visited == PageSearch.budget)
+        #expect(past.webAreas.isEmpty)
+        // Nested deep too, not only wide.
+        var deep = FakeNode.webArea("https://a.example.com/")
+        for _ in 0..<(PageSearch.budget * 2) {
+            deep = FakeNode(kAXGroupRole, [:], [deep])
+        }
+        let nested = PageSearch.webAreas(in: FakeNode(kAXWindowRole, [:], [deep]))
+        #expect(nested.visited == PageSearch.budget)
+        #expect(nested.webAreas.isEmpty)
+    }
 }

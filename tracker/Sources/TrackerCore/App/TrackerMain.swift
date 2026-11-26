@@ -5,16 +5,16 @@ import os
 /// the tracker and the app's run loop.
 ///
 /// - `TimeTracker`: track, into `databasePath()`.
-/// - `TimeTracker --dump-ax <bundle-id> <output-file>`: see `AXDump`.
+/// - `TimeTracker --dump-ax <bundle-id> <output-file> [--json]`: see `AXDump`.
 public enum TrackerMain {
     enum Command: Equatable {
         case track
-        case dumpAX(bundleID: String, outputPath: String)
+        case dumpAX(bundleID: String, outputPath: String, format: AXDump.Format)
         /// `--dump-ax` with the wrong arguments.
         case usageError
     }
 
-    static let usage = "usage: TimeTracker [--dump-ax <bundle-id> <output-file>]"
+    static let usage = "usage: TimeTracker [--dump-ax <bundle-id> <output-file> [--json]]"
 
     /// Other arguments are ignored: macOS and Xcode may add their own (`-NSDocumentRevisionsDebugMode YES`).
     static func command(arguments: [String]) -> Command {
@@ -22,7 +22,10 @@ public enum TrackerMain {
             return .track
         }
         if arguments.count == 4 {
-            return .dumpAX(bundleID: arguments[2], outputPath: arguments[3])
+            return .dumpAX(bundleID: arguments[2], outputPath: arguments[3], format: .text)
+        }
+        else if arguments.count == 5 && arguments[4] == "--json" {
+            return .dumpAX(bundleID: arguments[2], outputPath: arguments[3], format: .json)
         }
         else {
             return .usageError
@@ -33,8 +36,8 @@ public enum TrackerMain {
         switch command(arguments: arguments) {
         case .track:
             break
-        case .dumpAX(let bundleID, let outputPath):
-            exit(AXDump.run(bundleID: bundleID, outputPath: outputPath))
+        case .dumpAX(let bundleID, let outputPath, let format):
+            exit(AXDump.run(bundleID: bundleID, outputPath: outputPath, format: format))
         case .usageError:
             // Not tracking instead: the mistake would go unnoticed.
             FileHandle.standardError.write(Data("\(usage)\n".utf8))

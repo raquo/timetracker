@@ -1,0 +1,214 @@
+{
+  "bundleID" : "com.google.Chrome",
+  "bundlePath" : "/Applications/Google Chrome.app",
+  "focusPath" : [
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    1,
+    0
+  ],
+  "live" : {
+    "chosen" : 0,
+    "pages" : [
+      {
+        "title" : "Example Domain",
+        "url" : "https://example.com/"
+      }
+    ],
+    "visited" : 29
+  },
+  "window" : {
+    "attributes" : {
+      "AXDocument" : "https://example.com/",
+      "AXFullScreen" : false,
+      "AXMain" : true,
+      "AXRole" : "AXWindow",
+      "AXSubrole" : "AXStandardWindow",
+      "AXTitle" : "Example Domain - Google Chrome - Work"
+    },
+    "children" : [
+      {
+        "attributes" : {
+          "AXRole" : "AXGroup"
+        },
+        "children" : [
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup"
+                },
+                "children" : [
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXGroup"
+                    },
+                    "children" : [
+                      {
+                        "attributes" : {
+                          "AXRole" : "AXGroup"
+                        },
+                        "children" : [
+                          {
+                            "attributes" : {
+                              "AXRole" : "AXToolbar"
+                            },
+                            "isTrimmed" : true
+                          }
+                        ]
+                      },
+                      {
+                        "attributes" : {
+                          "AXRole" : "AXGroup"
+                        },
+                        "children" : [
+                          {
+                            "attributes" : {
+                              "AXRole" : "AXGroup"
+                            },
+                            "children" : [
+                              {
+                                "attributes" : {
+                                  "AXRole" : "AXGroup"
+                                }
+                              },
+                              {
+                                "attributes" : {
+                                  "AXRole" : "AXScrollArea"
+                                },
+                                "children" : [
+                                  {
+                                    "attributes" : {
+                                      "AXRole" : "AXWebArea",
+                                      "AXTitle" : "Example Domain",
+                                      "AXURL" : "https://example.com/"
+                                    },
+                                    "isTrimmed" : true
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "attributes" : {
+                              "AXRole" : "AXGroup"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "attributes" : {
+                          "AXRole" : "AXGroup"
+                        },
+                        "children" : [
+                          {
+                            "attributes" : {
+                              "AXRole" : "AXGroup"
+                            },
+                            "children" : [
+                              {
+                                "attributes" : {
+                                  "AXRole" : "AXPopUpButton"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "attributes" : {
+                              "AXRole" : "AXGroup"
+                            },
+                            "children" : [
+                              {
+                                "attributes" : {
+                                  "AXRole" : "AXTabGroup"
+                                },
+                                "children" : [
+                                  {
+                                    "attributes" : {
+                                      "AXRole" : "AXRadioButton",
+                                      "AXSubrole" : "AXTabButton"
+                                    },
+                                    "children" : [
+                                      {
+                                        "attributes" : {
+                                          "AXRole" : "AXButton"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "attributes" : {
+                                  "AXRole" : "AXGroup"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "attributes" : {
+                              "AXRole" : "AXButton"
+                            }
+                          },
+                          {
+                            "attributes" : {
+                              "AXRole" : "AXGroup"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "attributes" : {
+                          "AXRole" : "AXGroup"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXCloseButton"
+        }
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXFullScreenButton"
+        },
+        "children" : [
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXMinimizeButton"
+        }
+      }
+    ]
+  }
+}

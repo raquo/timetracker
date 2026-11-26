@@ -1,0 +1,378 @@
+{
+  "bundleID" : "com.google.Chrome",
+  "bundlePath" : "/Applications/Google Chrome.app",
+  "focusPath" : [
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "live" : {
+    "chosen" : 0,
+    "pages" : [
+      {
+        "title" : "DevTools",
+        "url" : "devtools://devtools/bundled/devtools_app.html?remoteBase=https://chrome-devtools-frontend.appspot.com/serve_file/@1de57fa19722fa6d6841d4f596c394d015580656/&targetType=tab&can_dock=true"
+      }
+    ],
+    "visited" : 18
+  },
+  "window" : {
+    "attributes" : {
+      "AXDocument" : "devtools://devtools/bundled/devtools_app.html?remoteBase=https://chrome-devtools-frontend.appspot.com/serve_file/@1de57fa19722fa6d6841d4f596c394d015580656/&targetType=tab&can_dock=true",
+      "AXFullScreen" : false,
+      "AXMain" : true,
+      "AXRole" : "AXWindow",
+      "AXSubrole" : "AXStandardWindow",
+      "AXTitle" : "DevTools - example.com/ - Work"
+    },
+    "children" : [
+      {
+        "attributes" : {
+          "AXRole" : "AXGroup"
+        },
+        "children" : [
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup"
+                },
+                "children" : [
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXGroup"
+                    },
+                    "children" : [
+                      {
+                        "attributes" : {
+                          "AXRole" : "AXGroup"
+                        }
+                      },
+                      {
+                        "attributes" : {
+                          "AXRole" : "AXGroup"
+                        },
+                        "children" : [
+                          {
+                            "attributes" : {
+                              "AXRole" : "AXGroup"
+                            },
+                            "children" : [
+                              {
+                                "attributes" : {
+                                  "AXRole" : "AXGroup"
+                                }
+                              },
+                              {
+                                "attributes" : {
+                                  "AXRole" : "AXScrollArea"
+                                },
+                                "children" : [
+                                  {
+                                    "attributes" : {
+                                      "AXRole" : "AXWebArea",
+                                      "AXTitle" : "DevTools",
+                                      "AXURL" : "devtools://devtools/bundled/devtools_app.html?remoteBase=https://chrome-devtools-frontend.appspot.com/serve_file/@1de57fa19722fa6d6841d4f596c394d015580656/&targetType=tab&can_dock=true"
+                                    },
+                                    "children" : [
+                                      {
+                                        "attributes" : {
+                                          "AXRole" : "AXGroup"
+                                        },
+                                        "children" : [
+                                          {
+                                            "attributes" : {
+                                              "AXRole" : "AXGroup"
+                                            },
+                                            "children" : [
+                                              {
+                                                "attributes" : {
+                                                  "AXRole" : "AXGroup",
+                                                  "AXSubrole" : "AXApplicationGroup"
+                                                },
+                                                "children" : [
+                                                  {
+                                                    "attributes" : {
+                                                      "AXRole" : "AXGroup"
+                                                    },
+                                                    "children" : [
+                                                      {
+                                                        "attributes" : {
+                                                          "AXRole" : "AXGroup"
+                                                        },
+                                                        "children" : [
+                                                          {
+                                                            "attributes" : {
+                                                              "AXRole" : "AXGroup",
+                                                              "AXSubrole" : "AXApplicationGroup"
+                                                            },
+                                                            "children" : [
+                                                              {
+                                                                "attributes" : {
+                                                                  "AXRole" : "AXGroup",
+                                                                  "AXSubrole" : "AXApplicationGroup"
+                                                                },
+                                                                "children" : [
+                                                                  {
+                                                                    "attributes" : {
+                                                                      "AXRole" : "AXGroup"
+                                                                    },
+                                                                    "children" : [
+                                                                      {
+                                                                        "attributes" : {
+                                                                          "AXRole" : "AXGroup"
+                                                                        },
+                                                                        "children" : [
+                                                                          {
+                                                                            "attributes" : {
+                                                                              "AXRole" : "AXGroup",
+                                                                              "AXSubrole" : "AXApplicationGroup"
+                                                                            },
+                                                                            "children" : [
+                                                                              {
+                                                                                "attributes" : {
+                                                                                  "AXRole" : "AXGroup"
+                                                                                },
+                                                                                "children" : [
+                                                                                  {
+                                                                                    "attributes" : {
+                                                                                      "AXRole" : "AXGroup"
+                                                                                    },
+                                                                                    "children" : [
+                                                                                      {
+                                                                                        "attributes" : {
+                                                                                          "AXRole" : "AXGroup",
+                                                                                          "AXSubrole" : "AXTabPanel"
+                                                                                        },
+                                                                                        "children" : [
+                                                                                          {
+                                                                                            "attributes" : {
+                                                                                              "AXRole" : "AXGroup",
+                                                                                              "AXSubrole" : "AXApplicationGroup"
+                                                                                            },
+                                                                                            "children" : [
+                                                                                              {
+                                                                                                "attributes" : {
+                                                                                                  "AXRole" : "AXGroup",
+                                                                                                  "AXSubrole" : "AXApplicationGroup"
+                                                                                                },
+                                                                                                "children" : [
+                                                                                                  {
+                                                                                                    "attributes" : {
+                                                                                                      "AXRole" : "AXGroup",
+                                                                                                      "AXSubrole" : "AXApplicationGroup"
+                                                                                                    },
+                                                                                                    "children" : [
+                                                                                                      {
+                                                                                                        "attributes" : {
+                                                                                                          "AXRole" : "AXGroup"
+                                                                                                        },
+                                                                                                        "children" : [
+                                                                                                          {
+                                                                                                            "attributes" : {
+                                                                                                              "AXRole" : "AXGroup"
+                                                                                                            },
+                                                                                                            "children" : [
+                                                                                                              {
+                                                                                                                "attributes" : {
+                                                                                                                  "AXRole" : "AXGroup",
+                                                                                                                  "AXSubrole" : "AXApplicationGroup"
+                                                                                                                },
+                                                                                                                "children" : [
+                                                                                                                  {
+                                                                                                                    "attributes" : {
+                                                                                                                      "AXRole" : "AXGroup"
+                                                                                                                    },
+                                                                                                                    "children" : [
+                                                                                                                      {
+                                                                                                                        "attributes" : {
+                                                                                                                          "AXRole" : "AXGroup"
+                                                                                                                        },
+                                                                                                                        "children" : [
+                                                                                                                          {
+                                                                                                                            "attributes" : {
+                                                                                                                              "AXRole" : "AXGroup"
+                                                                                                                            },
+                                                                                                                            "children" : [
+                                                                                                                              {
+                                                                                                                                "attributes" : {
+                                                                                                                                  "AXRole" : "AXGroup",
+                                                                                                                                  "AXSubrole" : "AXApplicationGroup"
+                                                                                                                                },
+                                                                                                                                "children" : [
+                                                                                                                                  {
+                                                                                                                                    "attributes" : {
+                                                                                                                                      "AXRole" : "AXGroup"
+                                                                                                                                    },
+                                                                                                                                    "children" : [
+                                                                                                                                      {
+                                                                                                                                        "attributes" : {
+                                                                                                                                          "AXRole" : "AXGroup"
+                                                                                                                                        },
+                                                                                                                                        "children" : [
+                                                                                                                                          {
+                                                                                                                                            "attributes" : {
+                                                                                                                                              "AXRole" : "AXGroup"
+                                                                                                                                            },
+                                                                                                                                            "children" : [
+                                                                                                                                              {
+                                                                                                                                                "attributes" : {
+                                                                                                                                                  "AXRole" : "AXTextArea"
+                                                                                                                                                },
+                                                                                                                                                "isTrimmed" : true
+                                                                                                                                              }
+                                                                                                                                            ]
+                                                                                                                                          }
+                                                                                                                                        ],
+                                                                                                                                        "isTrimmed" : true
+                                                                                                                                      }
+                                                                                                                                    ]
+                                                                                                                                  }
+                                                                                                                                ],
+                                                                                                                                "isTrimmed" : true
+                                                                                                                              }
+                                                                                                                            ]
+                                                                                                                          }
+                                                                                                                        ],
+                                                                                                                        "isTrimmed" : true
+                                                                                                                      }
+                                                                                                                    ],
+                                                                                                                    "isTrimmed" : true
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ],
+                                                                                                "isTrimmed" : true
+                                                                                              }
+                                                                                            ]
+                                                                                          }
+                                                                                        ]
+                                                                                      }
+                                                                                    ]
+                                                                                  }
+                                                                                ],
+                                                                                "isTrimmed" : true
+                                                                              }
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                ]
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ],
+                                        "isTrimmed" : true
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "attributes" : {
+                          "AXRole" : "AXGroup"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXCloseButton"
+        }
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXFullScreenButton"
+        },
+        "children" : [
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXMinimizeButton"
+        }
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXStaticText"
+        }
+      }
+    ]
+  }
+}

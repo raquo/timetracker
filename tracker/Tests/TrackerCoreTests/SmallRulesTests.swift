@@ -187,7 +187,8 @@ struct CommandLineTests {
 
     @Test func parses() {
         #expect(command() == .track)
-        #expect(command("--dump-ax", "com.google.Chrome", "/tmp/chrome.json") == .dumpAX(bundleID: "com.google.Chrome", outputPath: "/tmp/chrome.json"))
+        #expect(command("--dump-ax", "com.google.Chrome", "/tmp/chrome.json") == .dumpAX(bundleID: "com.google.Chrome", outputPath: "/tmp/chrome.json", format: .text))
+        #expect(command("--dump-ax", "com.google.Chrome", "/tmp/chrome.json", "--json") == .dumpAX(bundleID: "com.google.Chrome", outputPath: "/tmp/chrome.json", format: .json))
         // Arguments macOS or Xcode add are ignored.
         #expect(command("-NSDocumentRevisionsDebugMode", "YES") == .track)
         #expect(TrackerMain.command(arguments: []) == .track)
@@ -197,5 +198,6 @@ struct CommandLineTests {
         #expect(command("--dump-ax") == .usageError)
         #expect(command("--dump-ax", "com.google.Chrome") == .usageError)
         #expect(command("--dump-ax", "com.google.Chrome", "/tmp/a.json", "extra") == .usageError)
+        #expect(command("--dump-ax", "com.google.Chrome", "/tmp/a.json", "--json", "extra") == .usageError)
     }
 }

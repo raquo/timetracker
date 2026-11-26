@@ -1,9 +1,11 @@
 import AppKit
 import ApplicationServices
 
-/// Diagnostic: `TimeTracker --dump-ax <bundle-id> <output-file>` writes to a file what a running
-/// app exposes: the tracker's web area search on each of its windows (elements visited, time,
-/// web areas found), then the focused window's attributes and Accessibility tree.
+/// Diagnostic: `TimeTracker --dump-ax <bundle-id> <output-file> [--json]` writes to a file what
+/// a running app exposes:
+/// - text: the tracker's web area search on each of its windows (elements visited, time, web
+///   areas found), then the focused window's attributes and Accessibility tree;
+/// - `--json`: the focused window as an `AXFixture`, for tests. Errors are written as text.
 ///
 /// Must run as the installed app (e.g. via `open -n -W TimeTracker.app --args --dump-ax ...`)
 /// so that it has the tracker's Accessibility permission. Doesn't touch the database.
@@ -15,7 +17,12 @@ enum AXDump {
     static let maxNodes = 8000
     static let maxValueLength = 80
 
-    static func run(bundleID: String, outputPath: String) -> Int32 {
+    enum Format: Equatable {
+        case text
+        case json
+    }
+
+    static func run(bundleID: String, outputPath: String, format: Format) -> Int32 {
         var out = ""
         func line(_ s: String) {
             out += s + "\n"
@@ -38,6 +45,17 @@ enum AXDump {
         guard let window = appElement.focusedWindow else {
             line("no focused window")
             return 1
+        }
+        if format == .json {
+            let fixture = AXFixture.capture(app: appElement, window: window, bundleID: bundleID, bundlePath: app.bundleURL?.path)
+            do {
+                out = String(decoding: try fixture.encoded(), as: UTF8.self) + "\n"
+                return 0
+            }
+            catch {
+                line("encoding failed: \(error)")
+                return 1
+            }
         }
         let windows = [window] + appElement.elements(kAXWindowsAttribute).filter { $0 != window }
         for (i, w) in windows.enumerated() {
@@ -86,6 +104,17 @@ enum AXDump {
             parts.append("url=\(url.absoluteString)")
         }
         line(parts.joined(separator: " | "))
+        if element.role == AXName.webAreaRole {
+            // Every attribute, in case one holds what the URL doesn't (Claude's ⌘-click windows report about:blank).
+            let indent = String(repeating: "  ", count: depth + 1)
+            var names: CFArray?
+            if AXUIElementCopyAttributeNames(element, &names) == .success, let names = names as? [String] {
+                for name in names.sorted() where name != kAXChildrenAttribute && name != kAXParentAttribute {
+                    let value = element.value(name).map { String(describing: $0) } ?? "nil"
+                    line("\(indent)· \(name) = \(truncate(value))")
+                }
+            }
+        }
         for child in element.children {
             walk(child, depth: depth + 1, count: &count, line: line)
         }

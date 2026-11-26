@@ -1,0 +1,119 @@
+{
+  "bundleID" : "notion.id",
+  "bundlePath" : "/Applications/Notion.app",
+  "live" : {
+    "chosen" : 0,
+    "pages" : [
+      {
+        "title" : "Hello world page",
+        "url" : "https://app.notion.com/p/Hello-world-page-00000000000000000000000000000000"
+      }
+    ],
+    "visited" : 15
+  },
+  "window" : {
+    "attributes" : {
+      "AXFullScreen" : false,
+      "AXMain" : true,
+      "AXRole" : "AXWindow",
+      "AXSubrole" : "AXStandardWindow",
+      "AXTitle" : "Hello world page"
+    },
+    "children" : [
+      {
+        "attributes" : {
+          "AXRole" : "AXGroup"
+        },
+        "children" : [
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup"
+                },
+                "children" : [
+                  {
+                    "attributes" : {
+                      "AXRole" : "AXGroup"
+                    },
+                    "children" : [
+                      {
+                        "attributes" : {
+                          "AXRole" : "AXGroup"
+                        },
+                        "children" : [
+                          {
+                            "attributes" : {
+                              "AXRole" : "AXGroup"
+                            },
+                            "children" : [
+                              {
+                                "attributes" : {
+                                  "AXRole" : "AXScrollArea"
+                                },
+                                "children" : [
+                                  {
+                                    "attributes" : {
+                                      "AXRole" : "AXWebArea",
+                                      "AXTitle" : "Hello world page",
+                                      "AXURL" : "https://app.notion.com/p/Hello-world-page-00000000000000000000000000000000"
+                                    },
+                                    "isTrimmed" : true
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "attributes" : {
+                              "AXRole" : "AXGroup"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXCloseButton"
+        }
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXFullScreenButton"
+        },
+        "children" : [
+          {
+            "attributes" : {
+              "AXRole" : "AXGroup"
+            },
+            "children" : [
+              {
+                "attributes" : {
+                  "AXRole" : "AXGroup"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "attributes" : {
+          "AXRole" : "AXButton",
+          "AXSubrole" : "AXMinimizeButton"
+        }
+      }
+    ]
+  }
+}
