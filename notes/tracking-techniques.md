@@ -19,6 +19,13 @@ The tracker never records keystrokes, typed text, or which keys were pressed, an
 | **Consistency** | Everything read from one window element | URL and title of one tab in one request: a natural cross-check | URL and title from the same page element; window and page read separately |
 | **Stability** | Stable, documented APIs | Stable, documented dictionaries | Undocumented tree layout, can change with any app update |
 
+**Why Apple Events fit poorly with the rest of a sample.** They aren't asynchronous: from our side each request is a blocking request and reply, like an Accessibility read. The problems are elsewhere:
+- **No change events ("polled").** An app sends nothing when a value we'd read through Apple Events changes. We learn of a change only when something else makes us ask: an Accessibility event, a click, or the 5 s poll. Where the change also shows in the window title (most browser tab switches), the title event covers it. A URL-only change waits for a click or the poll, so its boundary is up to 5 s late ([docs/sampling.md](../docs/sampling.md), "Late boundaries").
+- **A separate read, of a possibly different window.** The request is a second round trip, made after the Accessibility reads, and the app may answer it later still, since scripting requests wait for its main thread (a busy app replies late or not at all, hence the timeout). So the URL can describe a later moment than the window title read just before. And `front window` is the app's notion of its frontmost window, which can differ from the Accessibility focused window: a title from one window next to a URL from another (consistency #2 in [docs/record-consistency.md](../docs/record-consistency.md)). Combining the two would need a cross-check, such as the window title read again after the request.
+- **A permission prompt per app,** which the user can deny.
+
+Within one app's Apple Events reply the values do agree: a tab's URL and title come in one request.
+
 In short: window-level Accessibility is the cheap baseline for every app; page-content Accessibility gives page URLs in browsers and Electron apps without extra permissions, but depends on undocumented tree layouts; Apple Events are the stable fallback for scriptable browsers if that breaks.
 
 ## Signals and APIs
@@ -39,25 +46,19 @@ In short: window-level Accessibility is the cheap baseline for every app; page-c
 
 ## When the tracker samples
 
-- **Events:** app activation (`NSWorkspace`); focused window changed and window title changed (`AXObserver` on the frontmost app); for apps whose pages are read also keyboard focus moving (`AXFocusedUIElementChanged`) and the page's title changes / `AXLoadComplete`; lock, unlock, sleep, wake. Bursts coalesced over 300 ms.
-- **Clicks:** a global `leftMouseUp` monitor schedules a sample 600 ms later, giving the app time to react (e.g. switching to the clicked conversation). Catches changes that send no Accessibility event. Needs the Accessibility permission. Only the fact of a click is used.
-- **Poll:** every 5 s as a backstop (idle transitions, URL-only changes).
-- **Settling:** a sample that differs from the open row is held back and the tracker samples again 400 ms later; the change is recorded once two samples at least 250 ms apart agree, starting at the time it was first seen. A change that reverts before that is dropped; one that never settles is recorded as last seen after 3 s. A change still settling when sampling stops for over 20 s (sleep, a hang) counts as first seen again after the gap, so its row can't span it. Prevents rows like one tab's title with another tab's URL.
-- An unchanged sample only extends the open row in memory; it's flushed to disk every 30 s. So sampling frequency doesn't add rows; changes do.
-- Before closing on quit (SIGTERM) or sleep, the tracker takes one last sample, so the time since the last poll isn't lost.
+Triggers, settling, sleep and late boundaries: [docs/sampling.md](../docs/sampling.md).
 
 Verified on 2026-11-22:
 - Firefox tab switches ~2 s apart: one row each (1.6–3.0 s), not snapped to the 5 s poll, so title events work.
 - Claude: switching Code sessions by click and ⌘N, switching to regular chats (`/new`, `/chat/…`) and back: one row each with the right page title and URL, ~2.6 s apart. Renaming a session shows up as a new page title on the same URL.
 
-For reference, ActivityWatch's defaults: window watcher polls every 1 s, AFK watcher every 5 s with a 180 s AFK timeout; each poll is a heartbeat the server merges into the last event.
 
 ## What apps expose
 
 ### Document paths (`AXDocument`)
 
 - **TextEdit, Preview** and most document-based Cocoa apps: full `file://` URL (stored as a path).
-- **Finder:** has the attribute, leaves it empty. The folder is available through Apple Events (`target of front window`).
+- **Finder:** has the attribute, leaves it empty. The folder is available through Apple Events (`target of front window`), which the tracker doesn't read yet (TODO "Finder folder" in [PLAN.md](PLAN.md)). So Finder rows have only the window title, usually the folder's name.
 - **IntelliJ IDEA:** has the attribute, leaves it empty. The window title is `project – file` (e.g. `timetracker – .gitignore`).
 - **VS Code:** full `file://` URL of the open file (empty on non-file tabs such as Welcome or release notes). With a folder open, the window title is `<tab> — <folder name>` (e.g. `build.sbt — HeartAI`), but the folder's path isn't reported anywhere; its `window.title` setting can add it (`${rootPath}`).
 - **Firefox, Claude, Notion, Slack, Obsidian:** no path.
@@ -89,5 +90,4 @@ See [electron-and-claude.md](electron-and-claude.md): how Electron windows are b
 - **Keychain prompt on build:** `codesign` needs Keychain access to the signing key; if "Always Allow" wasn't chosen, the build blocks on a dialog.
 - **Responsible process:** a binary launched from a terminal gets the terminal's permissions, not its own. Run the bundle via launchd or `open` to test permission-dependent behaviour.
 - **Apple Events can hang** when the target app is busy: always time out.
-- **Accessibility timeouts are per element:** `AXUIElementSetMessagingTimeout` on an app element doesn't cover the windows and children read from it (they wait ~6 s on a hung app). Set it once on `AXUIElementCreateSystemWide()` to make it the default for all elements.
 - **Browser Accessibility trees** make the browser do more work once built; the path to the web area may change across versions.

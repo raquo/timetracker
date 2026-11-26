@@ -21,7 +21,7 @@ Moving or updating `Foo.app` keeps the same app identity. Tables keyed by app id
 - **Gaps** between rows mean no data. A gap isn't "away"; idle and lock are rows of their own. Causes:
   - the Mac was asleep;
   - the tracker wasn't running;
-  - **the system clock was set back.** When the clock jumps backwards (set by hand, or corrected by network time – not because related to DST offset changes), new samples would get times that overlap rows already recorded. Instead, the tracker records nothing until the clock passes the latest recorded `end_ms` again. So the time spent under the earlier clock is a gap, and no rows overlap. A forward jump just looks like a gap.
+  - **the system clock was set back.** When the clock jumps backwards (set by hand, or corrected by network time – not because related to DST offset changes), new samples would get times that overlap rows already recorded. Instead, the tracker records nothing until the clock passes the latest recorded `end_ms` again. So the time spent under the earlier clock is a gap, and no rows overlap ([record-consistency.md](record-consistency.md)). A forward jump just looks like a gap.
 - **The newest row may still be ongoing.** The tracker writes its `end_ms` every 30 s, so on disk it lags by up to 30 s. Readers should treat a row that ended within the last 30 s as possibly still open.
 
 Attributes, all describing the frontmost app's focused window at that moment:
@@ -35,7 +35,7 @@ Attributes, all describing the frontmost app's focused window at that moment:
 | `is_full_screen` | Whether the focused window is in full screen. |
 | `document_path_id` | The window's document (`AXDocument`) → `tracker_path`. A plain file path for `file://` documents; a scrubbed URL when the app reports a web address (Chrome reports the tab's URL). |
 | `page_url_id`, `page_title_id` | URL and title of the same web page: the one shown in the focused window, in apps whose pages are read (browsers, Claude, …) → `tracker_url`, `tracker_title`. Both are read from the same page element. URLs are scrubbed. |
-| `is_input_idle` | 1 inside a stretch of ≥ 60 s without user input (keyboard, mouse, trackpad). The stretch starts at the last input (see "Why"). |
+| `is_input_idle` | 1 inside a stretch of ≥ 60 s without user input (keyboard, mouse, trackpad). The stretch starts at the last input: [idle-and-away.md](idle-and-away.md). |
 | `is_screen_locked` | 1 while the screen is locked. All window attributes are NULL then. |
 | `has_display_sleep_assertion`, `is_camera_in_use`, `is_mic_in_use` | Not recorded yet: always NULL. |
 
@@ -43,7 +43,7 @@ Attributes, all describing the frontmost app's focused window at that moment:
 
 **Older rows lack newer columns.** Columns added by later migrations (window role, main window, page title) are NULL in rows recorded before them.
 
-**Input-idle stretches have their real length, so the server can pick its own away threshold, of 60 s or more.** Idle rows start at the last input and end when input resumes, so a run of consecutive idle rows is one input-free stretch, and its length is known to within a few seconds. A threshold of 90 s or 7 minutes works as well as 5 minutes: the server checks whether the stretch is at least that long. Thresholds under 60 s can't be applied, since shorter stretches aren't marked. The tracker never decides what counts as away. Known gap: if a row closes during the stretch (a window title changes while the user is away), the rows before the change aren't marked idle, so the stretch looks shorter (consistency issue #5 in [PLAN.md](../notes/PLAN.md)).
+**Input-idle stretches have their real length,** so the server can apply any away threshold of 60 s or more: [idle-and-away.md](idle-and-away.md).
 
 ## Apps: `tracker_app`
 
@@ -101,5 +101,4 @@ A single row with the tracker's migration version. The tracker doesn't use `PRAG
 - **Lookup tables.** Titles and URLs repeat constantly. The server's attribution works on distinct combinations of them, which lookup IDs make cheap to collect.
 - **Per-path app rows.** History keeps which copy ran, and generic runtimes can be split apart later without rewriting tracker tables.
 - **Byte-for-byte strings.** The lookup cache used to compare with Swift's `==`, so a title could be filed under the other normalization form's row depending on what had been looked up since the last restart, and a NUL cut strings short (fixed 2026-11-23). Storing exactly what macOS reported is the only behaviour that doesn't depend on history. Normalizing is the server's job, where it can change.
-- **Idle rows start at the last input.** The tracker can only tell that the user is idle once 60 s have passed without input. Then it starts the idle row at the time of the last input, not at the moment it noticed: the row is *backdated*. Example: last input at 10:00:00; at 10:01:00 the tracker sees 60 s without input, and records 10:00:00 onwards as idle. Without that, every idle stretch would begin with 60 s recorded as active, and its recorded length would be 60 s short.
 - **Column names say what they refer to.** `document_path_id` (not `path_id`), `page_url_id` next to `page_title_id` (both from the same page), and `is_input_idle` (no user input, not an idle CPU or app). Renamed in migration 6.

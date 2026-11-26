@@ -4,7 +4,8 @@ A Swift agent without a menu bar item that records raw activity into `~/Library/
 
 - What it records and what the tables mean: [docs/data-model.md](../docs/data-model.md).
 - The rules it follows: [docs/tracker-principles.md](../docs/tracker-principles.md). How it fits with the server: [docs/architecture.md](../docs/architecture.md).
-- Topics not yet moved into docs (sampling and settling, URL scrubbing, idle, consistency): [notes/PLAN.md](../notes/PLAN.md), [tracking-techniques.md](../notes/tracking-techniques.md), [electron-and-claude.md](../notes/electron-and-claude.md).
+- When it samples, idle and lock, consistency: [docs/sampling.md](../docs/sampling.md), [docs/idle-and-away.md](../docs/idle-and-away.md), [docs/record-consistency.md](../docs/record-consistency.md).
+- Topics not yet moved into docs (page reading, URL scrubbing, diagnostics): [notes/PLAN.md](../notes/PLAN.md), [tracking-techniques.md](../notes/tracking-techniques.md), [electron-and-claude.md](../notes/electron-and-claude.md).
 
 ## One-time setup: signing identity
 

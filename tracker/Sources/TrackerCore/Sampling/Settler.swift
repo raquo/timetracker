@@ -1,6 +1,6 @@
 /// Holds back a changed sample until a second sample confirms it, so a row never records an
 /// in-between state: a browser that has committed the new URL but not yet the new title, or the
-/// moment mid-switch between two apps or tabs (consistency #1 in notes/PLAN.md).
+/// moment mid-switch between two apps or tabs (consistency #1 in docs/record-consistency.md).
 ///
 /// The confirmed row starts when the change was first seen, not when it was confirmed, so
 /// settling delays the write but doesn't move boundaries. A state that never settles (a title

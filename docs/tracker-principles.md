@@ -55,4 +55,4 @@ Rules every tracker feature follows. Other docs refer to them instead of restati
 
 Rules attribute time per row, so a mismatched row (one tab's title next to another tab's URL) is time silently filed under the wrong project, and nothing downstream can detect or repair it.
 
-The details (settling, separate writes, the clock watermark, the known ways this can break) are in the consistency notes in [PLAN.md](../notes/PLAN.md), until they get a topic doc.
+How the tracker keeps it (settling, separate writes, the clock watermark, the known ways this can break): [record-consistency.md](record-consistency.md).

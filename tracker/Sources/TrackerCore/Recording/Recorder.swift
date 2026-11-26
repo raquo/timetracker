@@ -26,7 +26,7 @@ final class Recorder {
     private var open: OpenInterval?
 
     /// Latest `end_ms` of any closed row. New rows never start before it, so rows never overlap,
-    /// even when the wall clock jumps backwards (see "Record consistency" in notes/PLAN.md).
+    /// even when the wall clock jumps backwards (see "Watermark" in docs/record-consistency.md).
     private var watermarkMs: Int64
     private var isClockBehind = false
 
