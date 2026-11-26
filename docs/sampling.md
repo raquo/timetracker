@@ -6,7 +6,7 @@ When the tracker looks at the screen, and how what it sees becomes `tracker_inte
 
 - **A sample** reads what's on screen right now: the frontmost app, its focused window (title, role, main / full screen, document), the page in it where pages are read, how long since the last input, and whether the screen is locked. Code: `Sampler` → `Snapshot`.
 - **Equal samples extend the open row; a changed sample ends it and starts a new one.** So how often the tracker samples doesn't add rows; only changes do.
-- **Changes are recorded at the time they were first seen,** usually within a second of happening, at most ~5 s later (see "Late boundaries").
+- **Changes are recorded at the time they were first seen,** usually within a second of happening, at most ~5 s later (see [Late boundaries](#late-boundaries)).
 - **A change has to hold for two samples** before it's recorded (settling), so in-between states don't get rows.
 - **Sleep, a hang or a stopped tracker leave a gap,** never a row stretched across the missing time.
 
@@ -50,7 +50,7 @@ A sample that differs from the open row isn't recorded right away:
 
 - **On sleep** (`NSWorkspace.willSleep`) the tracker takes its last sample, closes the open row, saves page probe counts ([data-model.md](data-model.md)), and stops sampling until wake.
 - **On wake** (`didWake`) it samples at once, which opens a new row.
-- **The 20 s gap rule:** if two consecutive samples are more than 20 s apart (4 polls), the open row ends at the earlier sample and a new row starts. That's what makes sleep correct even when the tracker never handles `willSleep` (see "Background"). It also covers anything else that stops sampling: a suspended process, or a sample stalled by a hung app.
+- **The 20 s gap rule:** if two consecutive samples are more than 20 s apart (4 polls), the open row ends at the earlier sample and a new row starts. That's what makes sleep correct even when the tracker never handles `willSleep` (see [Background](#background)). It also covers anything else that stops sampling: a suspended process, or a sample stalled by a hung app.
 
 ## Late boundaries
 
@@ -64,17 +64,17 @@ Settling records from the first sighting, so it adds nothing here. The poll inte
 
 ## Accessibility timeouts
 
-Every Accessibility call times out after 0.5 s, so an app that doesn't answer can't stall sampling. The timeout is set once, globally (see "Background"). Samples run on the tracker's own queue, never on the main thread.
+Every Accessibility call times out after 0.5 s, so an app that doesn't answer can't stall sampling. The timeout is set once, globally (see [Background](#background)). Samples run on the tracker's own queue, never on the main thread.
 
 ## Why
 
 - **Events plus a slow poll, not a fast poll.** Events catch most changes within a few hundred ms at almost no cost; a fast poll would cost CPU all day for the same boundaries ([tracker-principles.md](tracker-principles.md): lightweight). The poll is a backstop for what sends no event.
 - **Clicks as a trigger.** Some apps change what they show without any Accessibility event (Claude, clicking another conversation). Without the click trigger those changes would wait for the poll. A click is the only input event used, and only as "a click happened".
-- **One sample for several events.** Pages update their title several times while loading; sampling on each event would cost a sample per update and mostly see in-between states. Not restarting the timer on each event keeps the delay bounded, so a page that never stops updating still gets sampled.
+- **One sample for several events.** Pages update their title several times while loading; sampling on each event would cost a sample per update. Not restarting the timer on each event keeps the delay bounded, so a page that never stops updating still gets sampled.
 - **Settling instead of recording every sample.** Browsers commit the new URL before the new title (or single-page apps the other way round), and app switches pass through mixed states. One sample in between would record one page's title with another page's URL, a row that never existed. A 400 ms delay before writing is cheap; a mismatched row is permanent.
 - **Backdating confirmed changes to the first sighting.** Settling should cost latency, not accuracy.
 - **Ending the row at the last sample after a gap.** Stretching it across the gap would claim activity during sleep. The last sample is the last moment the tracker saw that state.
-- **20 s.** Four missed polls are well beyond timer jitter and a slow sample, and short enough that a missed sleep costs little.
+- **20 s.** Four missed polls: enough margin that timer jitter or an occasional slow or failed sample doesn't split a row by mistake.
 
 ## Background
 

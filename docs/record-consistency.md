@@ -9,8 +9,8 @@ How the tracker keeps the principle that **every row describes one real moment**
   - The page URL and page title come from the same page element.
 - **Changes are recorded only once confirmed** by settling ([sampling.md](sampling.md)), so a row doesn't mix two states.
 - **A field is NULL only when the value really isn't there.** Example: when a DevTools window is focused, there's no page URL that belongs to its title. The tracker never fills a field from another window or an earlier sample.
-- **Rows never overlap,** even when the clock jumps backwards (see "Watermark").
-- **Only one tracker writes a database** (see "One tracker per database").
+- **Rows never overlap,** even when the clock jumps backwards (see [Watermark](#watermark)).
+- **Only one tracker writes a database** (see [One tracker per database](#one-tracker-per-database)).
 - **Readers get a consistent view.** The database is in WAL mode, so the server reads committed rows while the tracker writes.
 
 ## Separate writes
@@ -58,6 +58,6 @@ At startup the tracker takes an exclusive `flock` on `<db>.lock`, next to the da
 ## Why
 
 - **A delay over a mismatched row.** Rules attribute time row by row. A mismatched row files time under the wrong project, and nothing downstream can tell. A short delay in writing costs nothing anyone sees.
-- **A gap over a guess.** When the tracker can't be sure of a state (a failed write, a clock it can't trust, missed samples), recording nothing is honest; extending or inventing a row isn't.
+- **A gap over a guess.** When the tracker can't be sure of a state (a failed write, a clock it can't trust, missed samples), a row extended or invented across that time might not describe a real moment; a gap claims nothing.
 - **No transaction around close and insert.** In one transaction, a failure in the insert's lookups would roll back the close too, and the old row would keep growing with a state that no longer holds.
-- **A lock file, not a check of running processes.** The lock is per database, so test builds and a second copy on another database run freely, and the kernel cleans it up after a crash.
+- **A lock on a file next to the database.** The lock is per database, so test runs and a tracker on another database run freely, and the kernel releases it after a crash, so there's no stale lock.

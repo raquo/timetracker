@@ -1,6 +1,6 @@
 # Data model (tracker tables)
 
-What the tracker's tables mean, for anyone reading them: the server, ad hoc queries, debugging. The columns and their comments are in [Schema.swift](../tracker/Sources/TrackerCore/Storage/Schema.swift), which is the source of truth for the exact DDL. This doc explains how to interpret the data. Example query: "Look at the data" in [tracker/README.md](../tracker/README.md).
+What the tracker's tables mean, for anyone reading them: the server, ad hoc queries, debugging. The columns and their comments are in [Schema.swift](../tracker/Sources/TrackerCore/Storage/Schema.swift), which is the source of truth for the exact DDL. This doc explains how to interpret the data. Example query: [Look at the data](../tracker/README.md#look-at-the-data) in tracker/README.md.
 
 All tables are prefixed `tracker_`, and only the tracker writes them (see [architecture.md](architecture.md)).
 
@@ -88,7 +88,7 @@ Two consequences for readers:
 
 The probe counts and times are saved on the first probe, on a decision, and when the tracker quits or the Mac sleeps, not on every probe. So after a crash they can be behind, but the decision isn't.
 
-The user's choice, which overrides the probe result, is in the server-owned table `app_page_reading_choice`. How probing works: "Page URL and title from app web content" in [tracker/README.md](../tracker/README.md), until page reading gets its own topic doc.
+The user's choice, which overrides the probe result, is in the server-owned table `app_page_reading_choice`. How probing works: [page-reading.md](page-reading.md).
 
 ## Schema version: `tracker_schema`
 
@@ -98,7 +98,7 @@ A single row with the tracker's migration version. The tracker doesn't use `PRAG
 
 - **Intervals rather than samples.** A row per sample (every few seconds, all day) would be large and mostly repetition. Intervals keep the data proportional to how often things change, and are what reports sum anyway.
 - **Raw facts only.** No projects, categories or rules in tracker tables. Categorizing later means rule edits apply to all history. See [architecture.md](architecture.md).
-- **Lookup tables.** Titles and URLs repeat constantly. The server's attribution works on distinct combinations of them, which lookup IDs make cheap to collect.
+- **Lookup tables.** Titles and URLs repeat constantly, so each is stored once.
 - **Per-path app rows.** History keeps which copy ran, and generic runtimes can be split apart later without rewriting tracker tables.
 - **Byte-for-byte strings.** The lookup cache used to compare with Swift's `==`, so a title could be filed under the other normalization form's row depending on what had been looked up since the last restart, and a NUL cut strings short (fixed 2026-11-23). Storing exactly what macOS reported is the only behaviour that doesn't depend on history. Normalizing is the server's job, where it can change.
 - **Column names say what they refer to.** `document_path_id` (not `path_id`), `page_url_id` next to `page_title_id` (both from the same page), and `is_input_idle` (no user input, not an idle CPU or app). Renamed in migration 6.

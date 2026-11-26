@@ -39,7 +39,7 @@ Some settings change what the tracker does: per-app page reading today; exclusio
 ## Priorities differ by piece
 
 - **The tracker optimizes for being lightweight,** since it runs all day ([tracker-principles.md](tracker-principles.md)).
-- **The server and UI optimize for ease of development.** They run only while used, and are where most of the product's features will be.
+- **The server and UI optimize for ease of development.** They run only while used.
 
 ## Server security
 

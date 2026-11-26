@@ -37,7 +37,7 @@ In short: window-level Accessibility is the cheap baseline for every app; page-c
 | Window title | `AXFocusedWindow` → `AXTitle` | Accessibility | recorded |
 | Window kind | `AXRole`, `AXSubrole`, `AXMain`, `AXFullScreen` on the focused window | Accessibility | recorded |
 | Document / file path | `AXDocument` on the focused window | Accessibility | recorded where apps report it (see below) |
-| Page URL / title in web content | Electron: `AXManualAccessibility` on the app first. Then `AXWebArea` → `AXURL`, `AXTitle` (or `AXDescription`) | Accessibility | recorded for apps where probing found content pages (browsers, Claude, …; see PLAN.md "Adaptive page reading") |
+| Page URL / title in web content | Electron: `AXManualAccessibility` on the app first. Then `AXWebArea` → `AXURL`, `AXTitle` (or `AXDescription`) | Accessibility | recorded for apps where probing found content pages (browsers, Claude, …; see [docs/page-reading.md](../docs/page-reading.md)) |
 | Safari / Chromium URL, alternative | Apple Events: `URL` and `title` of `active tab of front window`, with a timeout, off the main thread | Automation (per browser) | not needed so far |
 | Idle | `CGEventSource.secondsSinceLastEventType(.combinedSessionState, anyInputEventType)` | none | recorded |
 | Lock / sleep / wake | `NSWorkspace` `willSleep` / `didWake`; `com.apple.screenIsLocked` / `screenIsUnlocked` distributed notifications; at startup, `CGSessionCopyCurrentDictionary` (`CGSSessionScreenIsLocked`) | none | recorded |
@@ -65,24 +65,18 @@ Verified on 2026-11-22:
 
 ### Claude desktop app and other Electron apps
 
-See [electron-and-claude.md](electron-and-claude.md): how Electron windows are built, switching the web tree on, finding the content page, Claude's page URLs and titles, its session files, and known gaps.
+How the tracker reads web content (Electron and browsers alike): [docs/page-reading.md](../docs/page-reading.md). Claude's page URLs and titles, its session files and known gaps, and other Electron apps: [electron-and-claude.md](electron-and-claude.md).
 
 ### Browsers (verified 2026-11-22: Firefox Developer Edition, Safari, Chrome)
 
-- **They expose the shown tab's page without any switch:** the focused window holds one `AXWebArea` with `AXURL`, about 5 levels down (Firefox: window → `main-window` → `tabbrowser-tabpanels` → tab panel → scroll area → web area). Background tabs aren't in the tree. `AXManualAccessibility` is unsupported (error -25205) and not needed; `AXEnhancedUserInterface` isn't needed either, so no janky window animations.
-- **Title:** Chrome fills the web area's `AXTitle`; Firefox and Safari leave it empty and put the page title in `AXDescription`.
-- **Tab strips are big:** Firefox's search visited 137 elements (60 ms) until the tracker stopped descending into `AXToolbar`s; now 16 (12 ms).
-- **Lazily built:** the first read after a browser starts (or after nothing has read its tree for a while) can come back empty; Safari did once.
+- **How the tracker reads them** (the shown tab's web area, titles in `AXDescription`, tab strips skipped, lazily built trees): [docs/page-reading.md](../docs/page-reading.md). Firefox's path to the web area: window → `main-window` → `tabbrowser-tabpanels` → tab panel → scroll area → web area.
 - **Windows without a page:** Chrome's "Sign in with Google" popup (subrole `AXUnknown`) has no web area the search finds, so no URL.
 - **Firefox Picture-in-Picture player (dumped 2026-11-23):** a window titled "Picture-in-Picture" (localized), subrole `AXStandardWindow`, `AXMain` true, no `AXDocument`. Its one web area is `about:blank` (a placeholder, so no URL is recorded), holding the video (`domId=playervideo`) and controls (`close`, `unpip` "Send back to tab", a timestamp like `23:24 / 31:38`). Nothing in it names the source tab or its URL. So rows for a focused PiP player have the window title and no page. Guessing the page from another window would break "every row describes one real moment": the source tab needn't be the one shown. Time spent watching PiP while another app has focus is the "video / call" signal's job, not this.
 - **Firefox:** a row titled just "Firefox Developer Edition" (the bare app name) shows up for 2–5 s now and then while switching between populated tabs, in a standard main window. Cause unknown; the URL recorded with it next time may tell.
 
 ## Turning on an app's web Accessibility tree
 
-- **Electron:** `AXManualAccessibility = true` on the app element. Details, and how the tracker picks the content page: [electron-and-claude.md](electron-and-claude.md).
-- **Browsers:** nothing to switch for the shown tab's URL. `AXEnhancedUserInterface = true` (Firefox, Chromium) exposes more, with a known side effect: window move / resize animations become slow and janky; window managers (Rectangle etc.) switch it off temporarily while moving windows. The tracker doesn't set it.
-- Either way the tree stays on until the app quits; the tracker never switches it off (see PLAN.md, TODO "Tracker: Accessibility tree in other apps").
-- To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> <output-file>` (see [electron-and-claude.md](electron-and-claude.md)).
+Electron's `AXManualAccessibility`, browsers needing no switch, `AXEnhancedUserInterface` and why the tracker doesn't set it, and the dump tool: [docs/page-reading.md](../docs/page-reading.md).
 
 ## Gotchas
 

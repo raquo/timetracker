@@ -11,7 +11,7 @@ enum PageReadingMode {
 }
 
 /// Decides per app whether to read its pages, and finds out by probing for apps nobody has
-/// decided on. See "Adaptive page reading" in notes/PLAN.md.
+/// decided on. See docs/page-reading.md.
 ///
 /// - The user's choice (see `PageReadingStore`) wins unless it's auto.
 /// - Else the probe result. On: a probe saw a content page. Off: no probe saw one during

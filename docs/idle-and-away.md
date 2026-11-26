@@ -7,7 +7,7 @@ How the tracker records that nobody is using the Mac, and how the server is mean
 - **Input-idle:** `is_input_idle = 1` inside a stretch of at least 60 s without input (keyboard, mouse, trackpad). The stretch starts at the last input, not when the tracker noticed it (*backdated*).
 - **Screen locked:** `is_screen_locked = 1` while the screen is locked. App, window and page attributes are NULL then, and `is_input_idle` is 0: a locked row is locked, not idle.
 - **Sleep** is a gap, not a row ([sampling.md](sampling.md)).
-- **Away** isn't recorded by the tracker at all. The server decides it from the rows above (see "Away").
+- **Away** isn't recorded by the tracker at all. The server decides it from the rows above (see [Away](#away-server)).
 
 ## Input-idle
 
@@ -35,11 +35,11 @@ The away rule isn't built yet (the server isn't). The planned first version, and
 
 ## Why
 
-- **60 s, in the tracker.** It's the lowest away threshold the server would plausibly use. Recording finer stretches would add rows for every pause in reading or thinking.
+- **60 s, in the tracker.** Users are unlikely to want to count shorter pauses as away, so recording them gains nothing. And it would cost: each input-free stretch longer than the threshold gets rows of its own: it ends the open row, adds an idle row, and a new row starts when input resumes. A lower threshold would do that at every short pause, so more rows and writes (row churn, [tracker-principles.md](tracker-principles.md)). Checking costs the same at any threshold: the idle time is read on every sample anyway. Not measured. The price: the server can't apply an away threshold below it.
 - **Backdating.** Without it, every idle stretch would begin with 60 s recorded as active, and its recorded length would be 60 s short, so thresholds couldn't be applied exactly.
 - **An idle row of its own for the old state.** Without it, the backdated row would carry the attributes seen when idle was noticed, a row that never existed ([record-consistency.md](record-consistency.md), #5).
-- **Locked never becomes idle.** Lock is the stronger fact. Backdating idle into a locked row would claim the screen was usable while it was locked.
-- **Away in the server.** What counts as away is a preference (how long; whether a video counts), and it changes. Raw idle and lock facts let the server change its rule over all history.
+- **Locked never becomes idle.** The screen was locked until the unlock; an idle row there would describe a moment that didn't happen.
+- **Away in the server.** The tracker records raw facts and the server interprets them ([architecture.md](architecture.md)), so the away rule can change and apply to all history.
 
 ## Limitations
 

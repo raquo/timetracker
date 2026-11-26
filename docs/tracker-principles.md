@@ -11,8 +11,6 @@ Rules every tracker feature follows. Other docs refer to them instead of restati
 - Clicks are a sampling trigger with no position or target.
 - Signals are about *what was on screen*, never *what the user typed*. Reading a page's URL and title is in; reading a text field's contents is out.
 
-**Why.** A tracker with Accessibility access could read almost anything. Trusting it to run all day depends on a hard line that's easy to check, and this is that line.
-
 ## Record raw data generously
 
 **Rule.** While the tracker is young, record any cheap raw signal that might help explain or attribute time later, in as much detail as it comes. When unsure whether something is noise or useful, record it.
@@ -45,9 +43,9 @@ Rules every tracker feature follows. Other docs refer to them instead of restati
 - It samples on events (app activation, Accessibility notifications, clicks), with a 5 s poll as a backstop. It doesn't poll fast.
 - Each sample makes a few cheap calls. Every Accessibility call times out after 0.5 s, so a hung app can't stall the tracker.
 - It flushes the open row's end to disk every 30 s, not on every sample.
-- Costlier reads, like searching a window for its web page, are done only in apps where they pay off (page reading's per-app mode).
+- Costlier reads, like searching a window for its web page, are done only in apps where they pay off ([page-reading.md](page-reading.md#page-reading-mode)).
 
-**Why.** Background trackers that cost noticeable CPU or battery get switched off. The server and UI, which run only when used, optimize for ease of development instead.
+The server and UI, which run only when used, optimize for ease of development instead ([architecture.md](architecture.md)).
 
 ## Every row describes one real moment
 

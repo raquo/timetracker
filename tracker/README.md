@@ -5,7 +5,7 @@ A Swift agent without a menu bar item that records raw activity into `~/Library/
 - What it records and what the tables mean: [docs/data-model.md](../docs/data-model.md).
 - The rules it follows: [docs/tracker-principles.md](../docs/tracker-principles.md). How it fits with the server: [docs/architecture.md](../docs/architecture.md).
 - When it samples, idle and lock, consistency: [docs/sampling.md](../docs/sampling.md), [docs/idle-and-away.md](../docs/idle-and-away.md), [docs/record-consistency.md](../docs/record-consistency.md).
-- Topics not yet moved into docs (page reading, URL scrubbing, diagnostics): [notes/PLAN.md](../notes/PLAN.md), [tracking-techniques.md](../notes/tracking-techniques.md), [electron-and-claude.md](../notes/electron-and-claude.md).
+- Topics not yet moved into docs (URL scrubbing, diagnostics): [notes/PLAN.md](../notes/PLAN.md), [tracking-techniques.md](../notes/tracking-techniques.md), [electron-and-claude.md](../notes/electron-and-claude.md).
 
 ## One-time setup: signing identity
 
@@ -32,11 +32,7 @@ For a quick test without installing: `ALLOW_ADHOC=1 scripts/build.sh`, copy `bui
 
 ## Page URL and title from app web content
 
-The tracker records the URL and title of the page in the focused window (`page_url_id`, `page_title_id`), read from the app's web Accessibility tree, in apps where that's worth it. Which apps is decided per app (`PageReadingPolicy.swift`, "Adaptive page reading" in `../notes/PLAN.md`):
-
-- **Probing:** an app nobody has decided on gets one search of its focused window when that's a window not probed last in the app, and about once a minute, recording no page meanwhile. Electron apps (they ship `Electron Framework.framework`) get their tree switched on first (`AXManualAccessibility`), which costs them some CPU and memory until they quit; browsers and other apps expose their pages without a switch.
-- **Probe result** (`tracker_app_page_probe`): a content page seen → on (page read on every sample, with observers); none seen in 30 min of active use (with a focused window to probe) within one run → off. A row appears at an app's first probe (`has_content_pages` NULL until decided), with `probe_count` and first / last probe times, saved on the first probe, on a decision, and on quit / sleep.
-- **Your choice** overrides it: the server-owned table `app_page_reading_choice`, which the tracker only reads, and re-reads when another process writes to the database. Until the server and UI exist, create it by hand:
+How the tracker decides per app whether to read pages: [docs/page-reading.md](../docs/page-reading.md). The user's choice overrides its probe result, and lives in the server-owned table `app_page_reading_choice`. Until the server and UI exist, create it by hand:
 
 ```bash
 sqlite3 ~/Library/Application\ Support/com.raquo.timetracker/timetracker.db <<'SQL'
@@ -51,7 +47,7 @@ INSERT OR REPLACE INTO app_page_reading_choice VALUES (0, 'md.obsidian', 2, NULL
 SQL
 ```
 
-To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> /tmp/ax.txt`. Writes the tracker's page search on each of the app's windows (elements visited, time, web areas found), then the focused window's Accessibility tree. Switches the app's tree on and leaves it on. With the wrong arguments it prints the usage and exits with 2, rather than starting to track.
+To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> /tmp/ax.txt`. Writes the tracker's page search on each of the app's windows (elements visited, time, web areas found), then the focused window's Accessibility tree. Switches the app's tree on and leaves it on. With `--json` after the output file, it instead records the focused window as a test fixture (see `tracker/Tests/TrackerCoreTests/Fixtures/README.md`). With the wrong arguments it prints the usage and exits with 2, rather than starting to track.
 
 ## Code layout
 

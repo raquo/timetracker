@@ -4,7 +4,7 @@ import ApplicationServices
 /// Switches on the web Accessibility tree of Electron apps (`AXManualAccessibility`), which they
 /// build only when asked, and then keep up to date on every page change until they quit, which
 /// has a cost. Browsers and native apps with web views expose their pages without a switch.
-/// See notes/electron-and-claude.md.
+/// See docs/page-reading.md.
 ///
 /// We never switch the tree back off: we can't tell whether something else started relying on
 /// it while we ran (see TODO "Tracker: Accessibility tree in other apps" in notes/PLAN.md).

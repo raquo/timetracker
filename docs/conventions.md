@@ -24,7 +24,7 @@ To confirm: that opaque types work for us (they need Scala 3; Scala 2 `AnyVal` w
 
 The rejected alternative was `Long` everywhere in Scala. It works on both platforms, but in Scala.js it's emulated (slower, boxed) and needs a `.toDouble` at every JS API, deep in rendering code. With a shared model, one platform has to convert at its edges either way, and the JVM's edges are fewer.
 
-**Why whole milliseconds:** one unit everywhere means no conversions to get wrong between the pieces. A `Double` holds every whole millisecond exactly up to 2^53, about 285,000 years, and sums and differences of whole numbers stay exact. 64-bit integers avoid the 2038 rollover, which is a signed 32-bit seconds problem. Milliseconds are fine-grained enough for event ordering and cheap to store.
+**Why whole milliseconds:** one unit everywhere means no conversions to get wrong between the pieces. A `Double` holds every whole millisecond exactly up to 2^53, about 285,000 years, and sums and differences of whole numbers stay exact. 64-bit integers avoid the 2038 rollover, which is a signed 32-bit seconds problem.
 
 ## Naming
 
