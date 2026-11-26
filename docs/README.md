@@ -25,12 +25,13 @@ Tracker:
 - [record-consistency.md](record-consistency.md): how every row stays one real moment; the known ways that can break.
 - [idle-and-away.md](idle-and-away.md): input-idle and backdating, lock and unlock, and the server's away rule.
 - [page-reading.md](page-reading.md): finding the content page in a window, the page reading mode per app (on, off, probing), the Electron tree switch, cost.
+- [privacy.md](privacy.md): overview of every privacy measure (no keylogging, scrubbing before writing, data stays local), and what's planned.
+- [url-scrubbing.md](url-scrubbing.md): fragments, redaction, `AXDocument` URLs, decided exceptions.
+- [diagnostics.md](diagnostics.md): the `--dump-ax` tool, Accessibility fixtures and replay tests, checking a new app.
 
 Research (to be reorganized):
 - [tracking-techniques.md](../notes/tracking-techniques.md): how the tracker can get data from macOS, and what specific apps expose.
 - [electron-and-claude.md](../notes/electron-and-claude.md): Electron apps' web Accessibility tree, and the Claude desktop app.
-
-Not yet moved out of PLAN.md: privacy, diagnostics.
 
 ## How these docs work
 

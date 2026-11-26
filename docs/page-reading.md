@@ -8,7 +8,7 @@ Related: what the columns mean, [data-model.md](data-model.md); when samples are
 
 ## Behaviour
 
-**What's recorded.** Every interval (a `tracker_interval` row) has a page URL and a page title (`page_url_id`, `page_title_id`). They describe one web page: the *content page* shown in the focused window. Both are NULL when the window shows no content page, or when page reading is off for that app. URLs are scrubbed before they're recorded (URL scrubbing in [PLAN.md](../notes/PLAN.md), until privacy gets its doc).
+**What's recorded.** Every interval (a `tracker_interval` row) has a page URL and a page title (`page_url_id`, `page_title_id`). They describe one web page: the *content page* shown in the focused window. Both are NULL when the window shows no content page, or when page reading is off for that app. URLs are scrubbed before they're recorded ([url-scrubbing.md](url-scrubbing.md)).
 
 **How the content page is found.** macOS's Accessibility API shows each web page in a window as a *web area*, an element with the page's URL and title. A window can hold several. Some show content: a website, a conversation, a document. Others are the app's own UI, built as a web page and loaded from inside the app (Claude's sidebar shell, its find bar), or empty placeholders (`about:blank`). The tracker skips those. If exactly one page is left, that's the content page. If several are left, the content page is the one holding keyboard focus; if none of them holds it, nothing is recorded. Details: [Finding the content page](#finding-the-content-page).
 
@@ -102,7 +102,7 @@ Each is stored in a table owned by whoever decides it, so neither the tracker no
 
 ## Cost
 
-**Cost to the tracker:** each search visits a number of elements and makes a few Accessibility calls for each (role, children), plus URL and title per web area. Each call is a round trip to the app's process. An app whose page reading mode is on is searched on every sample; a probing app about once a minute. Measured with the dump tool (see [Exploring an app](#exploring-an-app)):
+**Cost to the tracker:** each search visits a number of elements and makes a few Accessibility calls for each (role, children), plus URL and title per web area. Each call is a round trip to the app's process. An app whose page reading mode is on is searched on every sample; a probing app about once a minute. Measured with the dump tool ([diagnostics.md](diagnostics.md#the-dump-tool)):
 
 | App | Elements visited | Time per search |
 |---|---|---|
@@ -116,10 +116,6 @@ Each is stored in a table owned by whoever decides it, so neither the tracker no
 A search in an app without pages stops at the search budget, 150 elements.
 
 **Cost to the app being read: not measured yet** (TODO "Measure its cost" in [PLAN.md](../notes/PLAN.md)). An app whose web tree is on keeps that tree up to date on every page change. Browsers usually pay this anyway (see [Background](#background)). Electron apps pay it only because the tracker switched their tree on.
-
-## Exploring an app
-
-`--dump-ax <bundle-id> <output-file>` runs the tracker's search on each window of a running app, and writes what it found (elements visited, time taken, web areas) to the file, followed by the focused window's whole tree. With `--json`, it instead saves the focused window as a test fixture, so `PageSearch` can be tested on real trees. Like the tracker, it switches an Electron app's tree on and leaves it on. How to run it: [tracker/README.md](../tracker/README.md#page-url-and-title-from-app-web-content). Code: `AxDump`, `AxFixture`.
 
 ## Why
 

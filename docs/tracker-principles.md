@@ -30,7 +30,7 @@ Rules every tracker feature follows. Other docs refer to them instead of restati
 **Rule.** Anything that must not be stored is removed before it reaches the database: URL scrubbing today, exclusions later.
 
 **In practice.**
-- URLs lose their fragment, and secret or personal values are replaced with `REDACTED`, before the lookup insert. This covers page URLs and web URLs reported as the window's document (`AXDocument`).
+- URLs lose their fragment, and secret or personal values are replaced with `REDACTED`, before the lookup insert. This covers page URLs and web URLs reported as the window's document (`AXDocument`). Details: [url-scrubbing.md](url-scrubbing.md). All privacy measures: [privacy.md](privacy.md).
 - Settings that change what's tracked (exclusions, per-site scrubbing exceptions) will live in server tables that the tracker reads (see [architecture.md](architecture.md)), and are applied at sample time.
 
 **Why.** A later cleanup can't un-write the file. Deleted rows can linger in the WAL file, free pages and backups.

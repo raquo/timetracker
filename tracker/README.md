@@ -5,7 +5,8 @@ A Swift agent without a menu bar item that records raw activity into `~/Library/
 - What it records and what the tables mean: [docs/data-model.md](../docs/data-model.md).
 - The rules it follows: [docs/tracker-principles.md](../docs/tracker-principles.md). How it fits with the server: [docs/architecture.md](../docs/architecture.md).
 - When it samples, idle and lock, consistency: [docs/sampling.md](../docs/sampling.md), [docs/idle-and-away.md](../docs/idle-and-away.md), [docs/record-consistency.md](../docs/record-consistency.md).
-- Topics not yet moved into docs (URL scrubbing, diagnostics): [notes/PLAN.md](../notes/PLAN.md), [tracking-techniques.md](../notes/tracking-techniques.md), [electron-and-claude.md](../notes/electron-and-claude.md).
+- Privacy: [docs/privacy.md](../docs/privacy.md); URL scrubbing: [docs/url-scrubbing.md](../docs/url-scrubbing.md). The dump tool, fixtures and replay tests: [docs/diagnostics.md](../docs/diagnostics.md).
+- Research not yet moved into docs: [tracking-techniques.md](../notes/tracking-techniques.md), [electron-and-claude.md](../notes/electron-and-claude.md).
 
 ## One-time setup: signing identity
 
@@ -47,7 +48,7 @@ INSERT OR REPLACE INTO app_page_reading_choice VALUES (0, 'md.obsidian', 2, NULL
 SQL
 ```
 
-To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> /tmp/ax.txt`. Writes the tracker's page search on each of the app's windows (elements visited, time, web areas found), then the focused window's Accessibility tree. Switches the app's tree on and leaves it on. With `--json` after the output file, it instead records the focused window as a test fixture (see `tracker/Tests/TrackerCoreTests/Fixtures/README.md`). With the wrong arguments it prints the usage and exits with 2, rather than starting to track.
+To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> /tmp/ax.txt`. With `--json` after the output file, it instead records the focused window as a test fixture (see `tracker/Tests/TrackerCoreTests/Fixtures/README.md`). What it writes, and how to check a new app with it: [docs/diagnostics.md](../docs/diagnostics.md).
 
 ## Code layout
 

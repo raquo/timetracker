@@ -59,7 +59,7 @@ Code: [Apps/Claude.swift](../tracker/Sources/TrackerCore/Apps/Claude.swift).
 - The window title already is the page title, so the tree adds only the URL.
 - Search cost: 14 elements, 3–9 ms per window. Whole tree ~1300 elements.
 - URL forms:
-  - Page: `/p/<Title-slug>-<page-id>`; with `#<block-id>` when opened at a block (e.g. from a link). The tracker drops fragments ("URL fragments" in [PLAN.md](PLAN.md)).
+  - Page: `/p/<Title-slug>-<page-id>`; with `#<block-id>` when opened at a block (e.g. from a link). The tracker drops fragments ([docs/url-scrubbing.md](../docs/url-scrubbing.md#fragments)).
   - Database view with a page open in side peek: `/p/<database-id>?v=<view-id>&p=<peeked-page-id>&pm=s`. The window title stays the database's name; only the URL names the peeked page.
 - Desktop tabs: only one web area per window, and the window had many tabs open, so only the active tab's page is attached.
 - Allowlisted on 2026-11-22; since 2026-11-23 found by probing. Its rows record the page URL, with the `#<block-id>` fragment dropped.
