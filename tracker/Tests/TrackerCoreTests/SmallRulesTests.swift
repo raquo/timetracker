@@ -77,13 +77,13 @@ struct DocumentPathTests {
         ("", ""),
     ])
     func documentPath(axDocument: String, expected: String) {
-        #expect(Sampler.documentPath(fromAXDocument: axDocument) == expected)
+        #expect(Sampler.documentPath(fromAxDocument: axDocument) == expected)
     }
 
     /// Rather not recorded than recorded unscrubbed.
     @Test(arguments: ["data:no-comma", "https://exa mple.com/?token=abc"])
-    func unscrubbableURLIsNotRecorded(axDocument: String) {
-        #expect(Sampler.documentPath(fromAXDocument: axDocument) == nil)
+    func unscrubbableUrlIsNotRecorded(axDocument: String) {
+        #expect(Sampler.documentPath(fromAxDocument: axDocument) == nil)
     }
 }
 
@@ -145,24 +145,24 @@ struct ElectronTreeSwitchTests {
 }
 
 struct AppIdentityTests {
-    @Test func bundleIDWins() {
-        #expect(AppIdentity(bundleID: "com.apple.TextEdit", executablePath: "/x/TextEdit") == AppIdentity(type: .bundleID, identifier: "com.apple.TextEdit"))
+    @Test func bundleIdWins() {
+        #expect(AppIdentity(bundleId: "com.apple.TextEdit", executablePath: "/x/TextEdit") == AppIdentity(type: .bundleId, identifier: "com.apple.TextEdit"))
     }
 
-    @Test func executablePathWithoutBundleID() {
+    @Test func executablePathWithoutBundleId() {
         let expected = AppIdentity(type: .executablePath, identifier: "/usr/local/bin/tool")
-        #expect(AppIdentity(bundleID: nil, executablePath: "/usr/local/bin/tool") == expected)
-        #expect(AppIdentity(bundleID: "", executablePath: "/usr/local/bin/tool") == expected)
+        #expect(AppIdentity(bundleId: nil, executablePath: "/usr/local/bin/tool") == expected)
+        #expect(AppIdentity(bundleId: "", executablePath: "/usr/local/bin/tool") == expected)
     }
 
     @Test func neither() {
-        #expect(AppIdentity(bundleID: nil, executablePath: nil) == nil)
-        #expect(AppIdentity(bundleID: "", executablePath: "") == nil)
+        #expect(AppIdentity(bundleId: nil, executablePath: nil) == nil)
+        #expect(AppIdentity(bundleId: "", executablePath: "") == nil)
         #expect(Snapshot(isScreenLocked: true).app == nil)
     }
 
     @Test func rawValuesMatchTheSchema() {
-        #expect(AppIdentifierType.bundleID.rawValue == 0)
+        #expect(AppIdentifierType.bundleId.rawValue == 0)
         #expect(AppIdentifierType.executablePath.rawValue == 1)
         #expect(PageReadingChoice.auto.rawValue == 0)
         #expect(PageReadingChoice.on.rawValue == 1)
@@ -187,14 +187,14 @@ struct CommandLineTests {
 
     @Test func parses() {
         #expect(command() == .track)
-        #expect(command("--dump-ax", "com.google.Chrome", "/tmp/chrome.json") == .dumpAX(bundleID: "com.google.Chrome", outputPath: "/tmp/chrome.json", format: .text))
-        #expect(command("--dump-ax", "com.google.Chrome", "/tmp/chrome.json", "--json") == .dumpAX(bundleID: "com.google.Chrome", outputPath: "/tmp/chrome.json", format: .json))
+        #expect(command("--dump-ax", "com.google.Chrome", "/tmp/chrome.json") == .dumpAx(bundleId: "com.google.Chrome", outputPath: "/tmp/chrome.json", format: .text))
+        #expect(command("--dump-ax", "com.google.Chrome", "/tmp/chrome.json", "--json") == .dumpAx(bundleId: "com.google.Chrome", outputPath: "/tmp/chrome.json", format: .json))
         // Arguments macOS or Xcode add are ignored.
         #expect(command("-NSDocumentRevisionsDebugMode", "YES") == .track)
         #expect(TrackerMain.command(arguments: []) == .track)
     }
 
-    @Test func dumpAXWithTheWrongArgumentsIsAnError() {
+    @Test func dumpAxWithTheWrongArgumentsIsAnError() {
         #expect(command("--dump-ax") == .usageError)
         #expect(command("--dump-ax", "com.google.Chrome") == .usageError)
         #expect(command("--dump-ax", "com.google.Chrome", "/tmp/a.json", "extra") == .usageError)

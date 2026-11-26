@@ -8,7 +8,7 @@
 ///
 /// The first read after a browser starts can come back empty while it builds the tree.
 enum Browsers {
-    static let bundleIDs: Set<String> = [
+    static let bundleIds: Set<String> = [
         // Firefox
         "org.mozilla.firefox",
         "org.mozilla.firefoxdeveloperedition",

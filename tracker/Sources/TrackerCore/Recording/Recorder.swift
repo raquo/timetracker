@@ -15,7 +15,7 @@ final class Recorder {
     static let flushEveryMs: Int64 = 30_000
 
     private struct OpenInterval {
-        let rowID: Int64
+        let rowId: Int64
         let snapshot: Snapshot
         let startMs: Int64
         var endMs: Int64
@@ -55,7 +55,7 @@ final class Recorder {
                 // Kept in memory before flushing: a failed flush must not look like a gap next time.
                 open = current
                 if nowMs - current.flushedEndMs >= Self.flushEveryMs {
-                    try store.setEnd(nowMs, rowID: current.rowID)
+                    try store.setEnd(nowMs, rowId: current.rowId)
                     open?.flushedEndMs = nowMs
                 }
                 return
@@ -69,20 +69,20 @@ final class Recorder {
                 // screen (unlocked without input, by Apple Watch): it was locked all along.
                 var oldEndMs = boundaryMs
                 var idleOld: Snapshot? = nil
-                if snapshot.isIdle, !current.snapshot.isIdle, !current.snapshot.isScreenLocked, let idleSinceMs {
+                if snapshot.isInputIdle, !current.snapshot.isInputIdle, !current.snapshot.isScreenLocked, let idleSinceMs {
                     oldEndMs = min(boundaryMs, max(current.startMs, idleSinceMs))
                     var wentIdle = current.snapshot
-                    wentIdle.isIdle = true
+                    wentIdle.isInputIdle = true
                     if wentIdle != snapshot, oldEndMs < boundaryMs {
                         idleOld = wentIdle
                     }
                 }
                 // Close first, on its own. If this throws, `open` is kept and the next sample retries.
                 if oldEndMs <= current.startMs {
-                    try store.delete(rowID: current.rowID)
+                    try store.delete(rowId: current.rowId)
                 }
                 else {
-                    try store.setEnd(oldEndMs, rowID: current.rowID)
+                    try store.setEnd(oldEndMs, rowId: current.rowId)
                 }
                 watermarkMs = max(watermarkMs, oldEndMs)
                 open = nil
@@ -120,17 +120,17 @@ final class Recorder {
         }
         if current.endMs == current.startMs {
             // Opened by the last sample before closing: no duration, so no row.
-            try store.delete(rowID: current.rowID)
+            try store.delete(rowId: current.rowId)
         }
         else if current.endMs != current.flushedEndMs {
-            try store.setEnd(current.endMs, rowID: current.rowID)
+            try store.setEnd(current.endMs, rowId: current.rowId)
         }
         watermarkMs = max(watermarkMs, current.endMs)
         open = nil
     }
 
     private func insert(_ s: Snapshot, startMs: Int64, endMs: Int64) throws -> OpenInterval {
-        let rowID = try store.insert(s, startMs: startMs, endMs: endMs)
-        return OpenInterval(rowID: rowID, snapshot: s, startMs: startMs, endMs: endMs, flushedEndMs: endMs)
+        let rowId = try store.insert(s, startMs: startMs, endMs: endMs)
+        return OpenInterval(rowId: rowId, snapshot: s, startMs: startMs, endMs: endMs, flushedEndMs: endMs)
     }
 }

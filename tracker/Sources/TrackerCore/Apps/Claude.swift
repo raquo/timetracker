@@ -8,5 +8,5 @@
 /// Planned here: reading the session files that map a Code session's URL to its folder and
 /// environment (TODO in notes/PLAN.md).
 enum Claude {
-    static let bundleID = "com.anthropic.claudefordesktop"
+    static let bundleId = "com.anthropic.claudefordesktop"
 }

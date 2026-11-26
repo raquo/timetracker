@@ -29,7 +29,7 @@ The window-level Accessibility data that works for native apps tells little abou
 What `PageSearch` does on every sample of an app whose pages are read, and on each probe ("Adaptive page reading" in [PLAN.md](PLAN.md)) ([PageSearch.swift](../tracker/Sources/TrackerCore/PageReading/PageSearch.swift)):
 
 1. Search the focused window for `AXWebArea` elements: depth-first through `AXChildren`, **never descending into a web area or an `AXToolbar`** (a browser's tab strip), up to 150 elements (500 before 2026-11-23). So it only walks the native wrappers around the pages, not the pages' content.
-2. Read each web area's `AXURL` (reported as a CFURL or a string). Skip only what's certainly not content (see "Record more" in PLAN.md):
+2. Read each web area's `AXURL` (reported as a CFURL or a string). Skip only what's certainly not content (see "Record raw data generously" in [tracker-principles.md](../docs/tracker-principles.md)):
    - pages loaded from inside the app's bundle (the URL's path is inside the `.app`, whatever the scheme: Electron's `file://…/app.asar/…`, VS Code's `vscode-file://vscode-app/…/Visual Studio Code.app/…`)
    - `about:blank`, an empty placeholder
    - everything else counts: local `file://` documents, custom schemes, browsers' own pages (`chrome://new-tab-page/`, `about:newtab`; until 2026-11-23 all `about:` pages were skipped).

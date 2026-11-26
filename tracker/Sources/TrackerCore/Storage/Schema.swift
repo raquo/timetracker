@@ -127,6 +127,16 @@ enum Schema {
         DROP TABLE tracker_app_page_probe;
         ALTER TABLE tracker_app_page_probe_new RENAME TO tracker_app_page_probe;
         """,
+
+        // 6: clearer names. path_id holds the focused window's document (AXDocument); url_id is
+        // the URL of the same page as page_title_id; is_idle means "no user input", not an idle CPU or app.
+        // Also: is_full_screen is recorded (NULL when not reported), despite the comment in 1; and
+        // page_title_id / page_url_id are read in apps where page reading is on, not an allowlist (see 3).
+        """
+        ALTER TABLE tracker_interval RENAME COLUMN path_id TO document_path_id;
+        ALTER TABLE tracker_interval RENAME COLUMN url_id TO page_url_id;
+        ALTER TABLE tracker_interval RENAME COLUMN is_idle TO is_input_idle;
+        """,
     ]
 
     static func migrate(_ db: Database) throws {

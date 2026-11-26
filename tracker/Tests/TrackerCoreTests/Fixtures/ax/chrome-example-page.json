@@ -1,5 +1,5 @@
 {
-  "bundleID" : "com.google.Chrome",
+  "bundleId" : "com.google.Chrome",
   "bundlePath" : "/Applications/Google Chrome.app",
   "focusPath" : [
     0,

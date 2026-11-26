@@ -63,7 +63,7 @@ final class PolicyHarness {
         try createChoiceTable()
         try server.query(
             "INSERT OR REPLACE INTO app_page_reading_choice VALUES (?, ?, ?, ?)",
-            [.int(app.type.rawValue), .text(app.identifier), .int(choice), SQLValue(reprobeAt.map { t0 + $0 })]
+            [.int(app.type.rawValue), .text(app.identifier), .int(choice), SqlValue(reprobeAt.map { t0 + $0 })]
         )
     }
 

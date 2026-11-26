@@ -2,8 +2,8 @@ import Testing
 @testable import TrackerCore
 
 struct PageReadingPolicyTests {
-    private let notion = AppIdentity(type: .bundleID, identifier: "notion.id")
-    private let vscode = AppIdentity(type: .bundleID, identifier: "com.microsoft.VSCode")
+    private let notion = AppIdentity(type: .bundleId, identifier: "notion.id")
+    private let vscode = AppIdentity(type: .bundleId, identifier: "com.microsoft.VSCode")
     private let tool = AppIdentity(type: .executablePath, identifier: "/usr/local/bin/tool")
     private let h: PolicyHarness
 

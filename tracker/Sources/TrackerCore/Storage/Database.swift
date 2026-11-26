@@ -4,7 +4,7 @@ import SQLite3
 /// Tells SQLite to copy bound strings, since Swift may free them before the statement runs.
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-struct SQLiteError: Error, CustomStringConvertible {
+struct SqliteError: Error, CustomStringConvertible {
     let code: Int32
     let message: String
     let sql: String?
@@ -14,17 +14,17 @@ struct SQLiteError: Error, CustomStringConvertible {
     }
 }
 
-enum SQLValue: Equatable {
+enum SqlValue: Equatable {
     case null
     case int(Int64)
     case text(String)
 
     init(_ value: Int64?) {
-        self = value.map(SQLValue.int) ?? .null
+        self = value.map(SqlValue.int) ?? .null
     }
 
     init(_ value: String?) {
-        self = value.map(SQLValue.text) ?? .null
+        self = value.map(SqlValue.text) ?? .null
     }
 
     init(_ value: Bool) {
@@ -64,7 +64,7 @@ final class Database {
         guard rc == SQLITE_OK, let h else {
             let message = h.map { String(cString: sqlite3_errmsg($0)) } ?? "cannot open database"
             sqlite3_close(h)
-            throw SQLiteError(code: rc, message: message, sql: nil)
+            throw SqliteError(code: rc, message: message, sql: nil)
         }
         handle = h
         // The server reads (and writes its own tables in) the same file; wait for its locks instead of failing.
@@ -84,7 +84,7 @@ final class Database {
         if rc != SQLITE_OK {
             let message = err.map { String(cString: $0) } ?? errorMessage
             sqlite3_free(err)
-            throw SQLiteError(code: rc, message: message, sql: sql)
+            throw SqliteError(code: rc, message: message, sql: sql)
         }
     }
 
@@ -94,7 +94,7 @@ final class Database {
 
     /// Runs a one-off query and returns all rows.
     @discardableResult
-    func query(_ sql: String, _ params: [SQLValue] = []) throws -> [[SQLValue]] {
+    func query(_ sql: String, _ params: [SqlValue] = []) throws -> [[SqlValue]] {
         try prepare(sql).run(params)
     }
 
@@ -112,7 +112,7 @@ final class Database {
         }
     }
 
-    var lastInsertRowID: Int64 {
+    var lastInsertRowId: Int64 {
         sqlite3_last_insert_rowid(handle)
     }
 
@@ -130,7 +130,7 @@ final class Statement {
         var s: OpaquePointer?
         let rc = sqlite3_prepare_v2(db.handle, sql, -1, &s, nil)
         guard rc == SQLITE_OK, let s else {
-            throw SQLiteError(code: rc, message: db.errorMessage, sql: sql)
+            throw SqliteError(code: rc, message: db.errorMessage, sql: sql)
         }
         self.db = db
         self.stmt = s
@@ -143,7 +143,7 @@ final class Statement {
 
     /// Binds `params` to `?1`, `?2`, … in order, runs the statement to completion, and returns all rows.
     @discardableResult
-    func run(_ params: [SQLValue] = []) throws -> [[SQLValue]] {
+    func run(_ params: [SqlValue] = []) throws -> [[SqlValue]] {
         defer {
             sqlite3_reset(stmt)
             sqlite3_clear_bindings(stmt)
@@ -157,17 +157,17 @@ final class Statement {
             case .text(let v): sqlite3_bind_text64(stmt, index, v, sqlite3_uint64(v.utf8.count), SQLITE_TRANSIENT, UInt8(SQLITE_UTF8))
             }
             guard rc == SQLITE_OK else {
-                throw SQLiteError(code: rc, message: db.errorMessage, sql: sql)
+                throw SqliteError(code: rc, message: db.errorMessage, sql: sql)
             }
         }
-        var rows: [[SQLValue]] = []
+        var rows: [[SqlValue]] = []
         while true {
             let rc = sqlite3_step(stmt)
             if rc == SQLITE_DONE {
                 return rows
             }
             guard rc == SQLITE_ROW else {
-                throw SQLiteError(code: rc, message: db.errorMessage, sql: sql)
+                throw SqliteError(code: rc, message: db.errorMessage, sql: sql)
             }
             let columnCount = sqlite3_column_count(stmt)
             rows.append((0..<columnCount).map { col in
@@ -191,7 +191,7 @@ final class Statement {
     }
 
     /// The first column of the first row, nil when there are no rows.
-    func value(_ params: [SQLValue] = []) throws -> SQLValue? {
+    func value(_ params: [SqlValue] = []) throws -> SqlValue? {
         try run(params).first?.first
     }
 }

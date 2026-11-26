@@ -56,7 +56,7 @@ enum PageSearch {
         }
         budget -= 1
         let role = element.role
-        if role == AXName.webAreaRole {
+        if role == AxName.webAreaRole {
             result.append(element)
             return
         }
@@ -70,7 +70,7 @@ enum PageSearch {
 
     /// The page shown by `webArea`, if it is content rather than the app's own UI.
     private static func contentPage<Node: AccessibilityNode>(_ webArea: Node, bundlePath: String?) -> WebPage<Node>? where Node.Element == Node {
-        guard let url = webArea.url(AXName.url), isContent(url, bundlePath: bundlePath), let scrubbed = URLScrubber.scrub(url) else {
+        guard let url = webArea.url(AxName.url), isContent(url, bundlePath: bundlePath), let scrubbed = UrlScrubber.scrub(url) else {
             return nil
         }
         // Firefox and Safari leave the title empty and put it in the description.
@@ -78,8 +78,8 @@ enum PageSearch {
         return WebPage(element: webArea, url: scrubbed, title: title)
     }
 
-    /// Every page counts except two that are certainly not content (see "Record more" in
-    /// notes/PLAN.md):
+    /// Every page counts except two that are certainly not content (see "Record raw data
+    /// generously" in docs/tracker-principles.md):
     /// - pages loaded from the app's own bundle, whatever the scheme: its UI (Electron's
     ///   `file://…/Claude.app/…/app.asar/…`, VS Code's `vscode-file://vscode-app/…/Visual Studio Code.app/…`);
     /// - `about:blank`, an empty placeholder (Firefox's Picture-in-Picture player).
@@ -102,7 +102,7 @@ enum PageSearch {
     /// element. Walks past other web areas on the way: focus is often in an iframe within the
     /// page (Google Docs types into one), and an iframe is a web area of its own.
     private static func pageHoldingFocus<Node: AccessibilityNode>(_ pages: [WebPage<Node>], app: Node) -> WebPage<Node>? where Node.Element == Node {
-        var element = app.focusedUIElement
+        var element = app.focusedUiElement
         for _ in 0..<maxParentHops {
             guard let current = element else {
                 return nil

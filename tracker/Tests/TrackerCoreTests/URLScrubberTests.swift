@@ -4,9 +4,9 @@ import Testing
 
 /// Every case states the exact string stored, so any change in what's kept, dropped, redacted or
 /// re-encoded shows up.
-struct URLScrubberTests {
+struct UrlScrubberTests {
     private func scrub(_ s: String) -> String? {
-        URLScrubber.scrub(URL(string: s)!)
+        UrlScrubber.scrub(URL(string: s)!)
     }
 
     @Test("Fragments are dropped", arguments: [
@@ -208,7 +208,7 @@ struct URLScrubberTests {
         "https://example.com/f?user%5Btheme%5D=dark&filter%5Bstatus%5D%5B%5D=open&sort%5B%5D=",
         "vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-sandbox/workbench/workbench.html",
     ])
-    func keepsCleanURLs(input: String) {
+    func keepsCleanUrls(input: String) {
         #expect(scrub(input) == input)
     }
 }

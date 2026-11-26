@@ -2,8 +2,8 @@ import ApplicationServices
 import Foundation
 @testable import TrackerCore
 
-/// Recorded Accessibility trees (`AXFixture`) in `Fixtures/ax/`, replayed on `FakeNode`s.
-enum AXFixtures {
+/// Recorded Accessibility trees (`AxFixture`) in `Fixtures/ax/`, replayed on `FakeNode`s.
+enum AxFixtures {
     static let directory = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()
@@ -15,8 +15,8 @@ enum AXFixtures {
         return files.filter { $0.hasSuffix(".json") }.map { String($0.dropLast(".json".count)) }.sorted()
     }()
 
-    static func load(_ name: String) throws -> AXFixture {
-        try AXFixture.decode(Data(contentsOf: directory.appendingPathComponent("\(name).json")))
+    static func load(_ name: String) throws -> AxFixture {
+        try AxFixture.decode(Data(contentsOf: directory.appendingPathComponent("\(name).json")))
     }
 }
 
@@ -28,7 +28,7 @@ struct Replay {
     /// The element holding keyboard focus, nil if none was recorded.
     let focused: FakeNode?
 
-    init(_ fixture: AXFixture) {
+    init(_ fixture: AxFixture) {
         window = Self.node(fixture.window)
         app = FakeNode(kAXApplicationRole, [:], [window])
         app.focusedWindow = window
@@ -43,7 +43,7 @@ struct Replay {
         app.focused = focused
     }
 
-    private static func node(_ n: AXFixture.Node) -> FakeNode {
+    private static func node(_ n: AxFixture.Node) -> FakeNode {
         var strings: [String: String] = [:]
         var flags: [String: Bool] = [:]
         for (name, attribute) in n.attributes {

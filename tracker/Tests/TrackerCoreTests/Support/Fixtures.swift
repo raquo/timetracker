@@ -8,7 +8,7 @@ let t0: Int64 = 1_800_000_000_000
 enum Fixtures {
     static func firefox(_ url: String?, _ pageTitle: String?, windowTitle: String? = nil) -> Snapshot {
         Snapshot(
-            bundleID: "org.mozilla.firefoxdeveloperedition",
+            bundleId: "org.mozilla.firefoxdeveloperedition",
             appName: "Firefox Developer Edition",
             bundlePath: "/Applications/Firefox Developer Edition.app",
             executablePath: "/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox",
@@ -17,7 +17,7 @@ enum Fixtures {
             windowSubrole: "AXStandardWindow",
             isMainWindow: true,
             isFullScreen: false,
-            url: url,
+            pageUrl: url,
             pageTitle: pageTitle
         )
     }
@@ -27,7 +27,7 @@ enum Fixtures {
 
     static func textEdit(_ path: String) -> Snapshot {
         Snapshot(
-            bundleID: "com.apple.TextEdit",
+            bundleId: "com.apple.TextEdit",
             appName: "TextEdit",
             bundlePath: "/System/Applications/TextEdit.app",
             executablePath: "/System/Applications/TextEdit.app/Contents/MacOS/TextEdit",
@@ -45,7 +45,7 @@ enum Fixtures {
     /// `s`, idle.
     static func idle(_ s: Snapshot) -> Snapshot {
         var idle = s
-        idle.isIdle = true
+        idle.isInputIdle = true
         return idle
     }
 

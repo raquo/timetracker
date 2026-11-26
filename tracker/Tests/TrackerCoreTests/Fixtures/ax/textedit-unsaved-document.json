@@ -1,5 +1,5 @@
 {
-  "bundleID" : "com.apple.TextEdit",
+  "bundleId" : "com.apple.TextEdit",
   "bundlePath" : "/System/Applications/TextEdit.app",
   "focusPath" : [
     0,

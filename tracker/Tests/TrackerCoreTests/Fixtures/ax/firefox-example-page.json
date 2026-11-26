@@ -1,5 +1,5 @@
 {
-  "bundleID" : "org.mozilla.firefoxdeveloperedition",
+  "bundleId" : "org.mozilla.firefoxdeveloperedition",
   "bundlePath" : "/Applications/Firefox Developer Edition.app",
   "focusPath" : [
     0,

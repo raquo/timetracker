@@ -229,9 +229,9 @@ struct RecorderTests {
         full.windowSubrole = "AXDialog"
         full.isMainWindow = false
         full.isFullScreen = true
-        full.url = "https://example.com/"
+        full.pageUrl = "https://example.com/"
         full.pageTitle = "Example"
-        var partial = Snapshot(bundleID: "com.example.Panel", appName: "Panel", bundlePath: "/Applications/Panel.app")
+        var partial = Snapshot(bundleId: "com.example.Panel", appName: "Panel", bundlePath: "/Applications/Panel.app")
         partial.windowRole = "AXWindow"
         try h.record(full, at: 0)
         try h.record(partial, at: 1_000)
@@ -242,11 +242,11 @@ struct RecorderTests {
         // Spelled out once, in case the expected-row builder is wrong too.
         #expect(rows[0] == StoredInterval(
             startMs: t0, endMs: t0 + 1_000,
-            app: StoredApp(type: .bundleID, identifier: "com.apple.TextEdit", path: "/System/Applications/TextEdit.app", name: "TextEdit"),
+            app: StoredApp(type: .bundleId, identifier: "com.apple.TextEdit", path: "/System/Applications/TextEdit.app", name: "TextEdit"),
             windowTitle: "notes.txt", documentPath: "/Users/someone/notes.txt",
-            url: "https://example.com/", pageTitle: "Example",
+            pageUrl: "https://example.com/", pageTitle: "Example",
             windowRole: "AXWindow", windowSubrole: "AXDialog",
-            isIdle: false, isScreenLocked: false, isMainWindow: false, isFullScreen: true
+            isInputIdle: false, isScreenLocked: false, isMainWindow: false, isFullScreen: true
         ))
         #expect(rows[1].windowSubrole == "")
         #expect(rows[1].isMainWindow == nil && rows[1].isFullScreen == nil)
@@ -258,8 +258,8 @@ struct RecorderTests {
         try h.close()
         #expect(try h.rows() == [StoredInterval(
             startMs: t0, endMs: t0 + 5_000, app: nil, windowTitle: nil, documentPath: nil,
-            url: nil, pageTitle: nil, windowRole: nil, windowSubrole: nil,
-            isIdle: false, isScreenLocked: true, isMainWindow: nil, isFullScreen: nil
+            pageUrl: nil, pageTitle: nil, windowRole: nil, windowSubrole: nil,
+            isInputIdle: false, isScreenLocked: true, isMainWindow: nil, isFullScreen: nil
         )])
     }
 
@@ -272,7 +272,7 @@ struct RecorderTests {
         try h.record(b, at: 5_000)
         try h.close()
         #expect(try h.rows() == [row(a, 0, 1_000), row(b, 1_000, 2_000), row(a, 2_000, 3_000), row(c, 3_000, 4_000), row(b, 4_000, 5_000)])
-        let ids = try h.temp.db.query("SELECT app_id, title_id, page_title_id, url_id, window_role_id FROM tracker_interval ORDER BY start_ms")
+        let ids = try h.temp.db.query("SELECT app_id, title_id, page_title_id, page_url_id, window_role_id FROM tracker_interval ORDER BY start_ms")
         // The same snapshot gets the same IDs.
         #expect(ids[0] == ids[2])
         #expect(ids[1] == ids[4])
@@ -298,7 +298,7 @@ struct RecorderTests {
         try h.record(a, at: 0)
         try h.record(renamed, at: 1_000)
         try h.record(moved, at: 2_000)
-        let panel = Snapshot(bundleID: "com.example.Panel", bundlePath: "/Applications/Panel.app")
+        let panel = Snapshot(bundleId: "com.example.Panel", bundlePath: "/Applications/Panel.app")
         try h.record(tool, at: 3_000)
         try h.record(panel, at: 4_000)
         try h.record(panel, at: 5_000)
@@ -313,10 +313,10 @@ struct RecorderTests {
             // No name from macOS: named after the bundle, extension and all.
             [.int(0), .text("com.example.Panel"), .text("/Applications/Panel.app"), .text("Panel.app")],
         ])
-        let appIDs = try h.temp.db.query("SELECT app_id FROM tracker_interval ORDER BY start_ms").map { $0[0].int! }
-        try #require(appIDs.count == 5)
-        #expect(appIDs[0] == appIDs[1])
-        #expect(Set(appIDs).count == 4)
+        let appIds = try h.temp.db.query("SELECT app_id FROM tracker_interval ORDER BY start_ms").map { $0[0].int! }
+        try #require(appIds.count == 5)
+        #expect(appIds[0] == appIds[1])
+        #expect(Set(appIds).count == 4)
     }
 }
 
@@ -330,8 +330,8 @@ struct PipelineTests {
         h = try RecorderHarness()
     }
 
-    @Test func tabSwitchWithURLBeforeTitleGivesTwoRows() throws {
-        let bHalf = Fixtures.firefox(b.url, a.pageTitle)
+    @Test func tabSwitchWithUrlBeforeTitleGivesTwoRows() throws {
+        let bHalf = Fixtures.firefox(b.pageUrl, a.pageTitle)
         try h.tick(a, at: 0)
         try h.tick(a, at: 400)
         try h.tick(a, at: 5_400)
@@ -449,7 +449,7 @@ struct RecorderWriteFailureTests {
             try h.record(a, at: at)
         }
         try h.temp.failWrites("UPDATE")
-        #expect(throws: SQLiteError.self) {
+        #expect(throws: SqliteError.self) {
             try h.record(a, at: 30_000)
         }
         try h.temp.restoreWrites()
@@ -464,7 +464,7 @@ struct RecorderWriteFailureTests {
             try h.record(a, at: at)
         }
         try h.temp.failWrites("INSERT")
-        #expect(throws: SQLiteError.self) {
+        #expect(throws: SqliteError.self) {
             try h.record(Fixtures.idle(b), at: 70_000, idleSince: 10_000)
         }
         try h.temp.restoreWrites()
@@ -479,7 +479,7 @@ struct RecorderWriteFailureTests {
         try h.record(a, at: 0)
         try h.record(a, at: 10_000)
         try h.temp.failWrites("UPDATE")
-        #expect(throws: SQLiteError.self) {
+        #expect(throws: SqliteError.self) {
             try h.record(b, at: 12_000)
         }
         try h.temp.restoreWrites()
@@ -492,7 +492,7 @@ struct RecorderWriteFailureTests {
         try h.record(a, at: 0)
         try h.record(a, at: 10_000)
         try h.temp.failWrites("INSERT")
-        #expect(throws: SQLiteError.self) {
+        #expect(throws: SqliteError.self) {
             try h.record(b, at: 12_000)
         }
         try h.temp.restoreWrites()
@@ -507,7 +507,7 @@ struct RecorderWriteFailureTests {
         try h.record(a, at: 0)
         try h.record(a, at: 5_000)
         try h.temp.failWrites("UPDATE")
-        #expect(throws: SQLiteError.self) {
+        #expect(throws: SqliteError.self) {
             try h.close()
         }
         try h.temp.restoreWrites()
@@ -520,7 +520,7 @@ struct RecorderWriteFailureTests {
     @Test func failedDeleteOfAZeroLengthRowIsRetried() throws {
         try h.record(a, at: 0)
         try h.temp.failWrites("DELETE")
-        #expect(throws: SQLiteError.self) {
+        #expect(throws: SqliteError.self) {
             try h.close()
         }
         try h.temp.restoreWrites()

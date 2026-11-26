@@ -25,7 +25,7 @@ struct PageSearchTests {
             FakeNode.webArea("https://a.example.com/doc?token=t#part", title: "A", [FakeNode(kAXGroupRole, [:], [iframe])]),
             FakeNode.webArea("about:blank"),
             FakeNode.webArea("file://\(bundlePath)/Contents/Resources/ui.html"),
-            FakeNode(AXName.webAreaRole, [AXName.url: "https://b.example.com/", kAXDescriptionAttribute: "B"]),
+            FakeNode(AxName.webAreaRole, [AxName.url: "https://b.example.com/", kAXDescriptionAttribute: "B"]),
         ]
         let found = PageSearch.contentPages(in: window(pages, toolbar: toolbar), bundlePath: bundlePath)
         // Not the toolbar's web area, not the iframe within a page, not the two that aren't
@@ -95,7 +95,7 @@ struct PageSearchTests {
         // The window, 148 groups, then the page: the 150th element.
         let last = PageSearch.webAreas(in: pageAfter(groups: PageSearch.budget - 2))
         #expect(last.visited == PageSearch.budget)
-        #expect(last.webAreas.map { $0.url(AXName.url)?.absoluteString } == ["https://a.example.com/"])
+        #expect(last.webAreas.map { $0.url(AxName.url)?.absoluteString } == ["https://a.example.com/"])
         // One more group and the page is past the budget.
         let past = PageSearch.webAreas(in: pageAfter(groups: PageSearch.budget - 1))
         #expect(past.visited == PageSearch.budget)

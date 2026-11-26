@@ -24,9 +24,9 @@ final class FakeNode: AccessibilityNode, CustomStringConvertible {
 
     /// A web area showing `url`, titled `title`.
     static func webArea(_ url: String, title: String? = nil, _ children: [FakeNode] = []) -> FakeNode {
-        var attributes = [AXName.url: url]
+        var attributes = [AxName.url: url]
         attributes[kAXTitleAttribute] = title
-        return FakeNode(AXName.webAreaRole, attributes, children)
+        return FakeNode(AxName.webAreaRole, attributes, children)
     }
 
     func add(_ child: FakeNode) {
@@ -68,6 +68,6 @@ final class FakeNode: AccessibilityNode, CustomStringConvertible {
     }
 
     var description: String {
-        "\(attributes[kAXRoleAttribute] ?? "?") \(attributes[AXName.url] ?? "")"
+        "\(attributes[kAXRoleAttribute] ?? "?") \(attributes[AxName.url] ?? "")"
     }
 }

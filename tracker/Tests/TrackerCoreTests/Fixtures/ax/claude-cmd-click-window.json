@@ -1,5 +1,5 @@
 {
-  "bundleID" : "com.anthropic.claudefordesktop",
+  "bundleId" : "com.anthropic.claudefordesktop",
   "bundlePath" : "/Applications/Claude.app",
   "focusPath" : [
     0,

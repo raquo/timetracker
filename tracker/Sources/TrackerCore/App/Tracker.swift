@@ -131,7 +131,7 @@ final class Tracker {
         let isAxTrusted = checkAccessibility()
         let now = nowMs()
         let sample = sampler.sample(nowMs: now, isScreenLocked: isScreenLocked, isAxTrusted: isAxTrusted)
-        windowObserver.observe(pid: sample.frontmostPID, watchFocusedElement: sample.isReadingPages, isAxTrusted: isAxTrusted)
+        windowObserver.observe(pid: sample.frontmostPid, watchFocusedElement: sample.isReadingPages, isAxTrusted: isAxTrusted)
         windowObserver.watchPage(sample.pageElement)
         switch settler.decide(sample.snapshot, atMs: now, recorded: recorder.openSnapshot) {
         case .record(let changedAtMs):

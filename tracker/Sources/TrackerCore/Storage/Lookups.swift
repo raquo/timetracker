@@ -13,7 +13,7 @@ final class Lookup<Key: Hashable> {
         case int(Int64)
         case bytes([UInt8])
 
-        init(_ value: SQLValue) {
+        init(_ value: SqlValue) {
             switch value {
             case .null: self = .null
             case .int(let i): self = .int(i)
@@ -25,7 +25,7 @@ final class Lookup<Key: Hashable> {
     private let db: Database
     private let select: Statement
     private let insert: Statement
-    private let bind: (Key) -> [SQLValue]
+    private let bind: (Key) -> [SqlValue]
     private let maxCacheSize = 10_000
     private var cache: [[ExactValue]: Int64] = [:]
 
@@ -35,7 +35,7 @@ final class Lookup<Key: Hashable> {
         table: String,
         keyColumns: [String],
         extraColumns: [String] = [],
-        bind: @escaping (Key) -> [SQLValue]
+        bind: @escaping (Key) -> [SqlValue]
     ) throws {
         let columns = keyColumns + extraColumns
         let condition = keyColumns.map { "\($0) = ?" }.joined(separator: " AND ")
@@ -47,7 +47,7 @@ final class Lookup<Key: Hashable> {
     }
 
     /// nil when `key` is nil. `extra`: values of the extra columns, used only if the row is new.
-    func id(for key: Key?, extra: [SQLValue] = []) throws -> Int64? {
+    func id(for key: Key?, extra: [SqlValue] = []) throws -> Int64? {
         guard let key else {
             return nil
         }
@@ -62,7 +62,7 @@ final class Lookup<Key: Hashable> {
         }
         else {
             try insert.run(params + extra)
-            id = db.lastInsertRowID
+            id = db.lastInsertRowId
         }
         if cache.count >= maxCacheSize {
             cache.removeAll()

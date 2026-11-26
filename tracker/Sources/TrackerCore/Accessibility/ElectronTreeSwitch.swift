@@ -35,7 +35,7 @@ final class ElectronTreeSwitch {
     /// asynchronously, so the first searches after that may find nothing.
     func enableIfElectron(app: AXUIElement, pid: pid_t, bundlePath: String?) {
         enableIfElectron(pid: pid, bundlePath: bundlePath) {
-            app.set(AXName.manualAccessibility, true)
+            app.set(AxName.manualAccessibility, true)
         }
     }
 

@@ -11,7 +11,7 @@ extension Logger {
 }
 
 /// Current time in Unix epoch milliseconds. Always Int64, never Int32 or seconds:
-/// see "Timestamps" in notes/PLAN.md.
+/// see "Timestamps and durations" in docs/conventions.md.
 func nowMs() -> Int64 {
     Int64(Date().timeIntervalSince1970 * 1000)
 }

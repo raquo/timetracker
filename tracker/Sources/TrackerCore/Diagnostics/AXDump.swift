@@ -5,14 +5,14 @@ import ApplicationServices
 /// a running app exposes:
 /// - text: the tracker's web area search on each of its windows (elements visited, time, web
 ///   areas found), then the focused window's attributes and Accessibility tree;
-/// - `--json`: the focused window as an `AXFixture`, for tests. Errors are written as text.
+/// - `--json`: the focused window as an `AxFixture`, for tests. Errors are written as text.
 ///
 /// Must run as the installed app (e.g. via `open -n -W TimeTracker.app --args --dump-ax ...`)
 /// so that it has the tracker's Accessibility permission. Doesn't touch the database.
 ///
 /// Switches on the app's web tree (`AXManualAccessibility`) and leaves it on, like the tracker:
 /// Electron apps report the flag as false even while it's on, so we can't tell whether to restore it.
-enum AXDump {
+enum AxDump {
     static let maxDepth = 60
     static let maxNodes = 8000
     static let maxValueLength = 80
@@ -22,7 +22,7 @@ enum AXDump {
         case json
     }
 
-    static func run(bundleID: String, outputPath: String, format: Format) -> Int32 {
+    static func run(bundleId: String, outputPath: String, format: Format) -> Int32 {
         var out = ""
         func line(_ s: String) {
             out += s + "\n"
@@ -32,13 +32,13 @@ enum AXDump {
         }
         Accessibility.setGlobalTimeout()
         line("AXIsProcessTrusted: \(AXIsProcessTrusted())")
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
-            line("no running app with bundle ID \(bundleID)")
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else {
+            line("no running app with bundle ID \(bundleId)")
             return 1
         }
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
-        let setResult = appElement.set(AXName.manualAccessibility, true)
-        line("set \(AXName.manualAccessibility) true: \(setResult.rawValue)")
+        let setResult = appElement.set(AxName.manualAccessibility, true)
+        line("set \(AxName.manualAccessibility) true: \(setResult.rawValue)")
         // Electron builds the web tree lazily after the flag is set.
         RunLoop.current.run(until: Date().addingTimeInterval(2))
 
@@ -47,7 +47,7 @@ enum AXDump {
             return 1
         }
         if format == .json {
-            let fixture = AXFixture.capture(app: appElement, window: window, bundleID: bundleID, bundlePath: app.bundleURL?.path)
+            let fixture = AxFixture.capture(app: appElement, window: window, bundleId: bundleId, bundlePath: app.bundleURL?.path)
             do {
                 out = String(decoding: try fixture.encoded(), as: UTF8.self) + "\n"
                 return 0
@@ -65,7 +65,7 @@ enum AXDump {
             let title = w.string(kAXTitleAttribute) ?? "untitled"
             line("search window \(i) (\(title)): visited \(result.visited) elements, \(elapsedMs) ms, \(result.webAreas.count) web areas")
             for area in result.webAreas {
-                let url = area.url(AXName.url)?.absoluteString ?? "nil"
+                let url = area.url(AxName.url)?.absoluteString ?? "nil"
                 line("  web area: url=\(url) | title=\(area.string(kAXTitleAttribute).map(truncate) ?? "nil")")
             }
         }
@@ -94,17 +94,17 @@ enum AXDump {
             ("title", kAXTitleAttribute),
             ("desc", kAXDescriptionAttribute),
             ("value", kAXValueAttribute),
-            ("domId", AXName.domIdentifier),
+            ("domId", AxName.domIdentifier),
         ] {
             if let s = element.string(attribute) {
                 parts.append("\(label)=\(truncate(s))")
             }
         }
-        if let url = element.url(AXName.url) {
+        if let url = element.url(AxName.url) {
             parts.append("url=\(url.absoluteString)")
         }
         line(parts.joined(separator: " | "))
-        if element.role == AXName.webAreaRole {
+        if element.role == AxName.webAreaRole {
             // Every attribute, in case one holds what the URL doesn't (Claude's ⌘-click windows report about:blank).
             let indent = String(repeating: "  ", count: depth + 1)
             var names: CFArray?

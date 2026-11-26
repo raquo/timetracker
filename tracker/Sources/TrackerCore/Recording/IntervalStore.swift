@@ -23,8 +23,8 @@ final class IntervalStore {
         }
         insertRow = try db.prepare("""
             INSERT INTO tracker_interval (
-                start_ms, end_ms, app_id, title_id, path_id, url_id, page_title_id, window_role_id,
-                is_idle, is_screen_locked, is_main_window, is_full_screen
+                start_ms, end_ms, app_id, title_id, document_path_id, page_url_id, page_title_id, window_role_id,
+                is_input_idle, is_screen_locked, is_main_window, is_full_screen
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """)
@@ -40,25 +40,25 @@ final class IntervalStore {
 
     /// Returns the new row's ID.
     func insert(_ s: Snapshot, startMs: Int64, endMs: Int64) throws -> Int64 {
-        let appID = try apps.id(for: s)
-        let titleID = try titles.id(for: s.windowTitle)
-        let pathID = try paths.id(for: s.documentPath)
-        let urlID = try urls.id(for: s.url)
-        let pageTitleID = try titles.id(for: s.pageTitle)
-        let windowRoleID = try windowRoles.id(for: WindowRole(role: s.windowRole, subrole: s.windowSubrole))
+        let appId = try apps.id(for: s)
+        let titleId = try titles.id(for: s.windowTitle)
+        let documentPathId = try paths.id(for: s.documentPath)
+        let pageUrlId = try urls.id(for: s.pageUrl)
+        let pageTitleId = try titles.id(for: s.pageTitle)
+        let windowRoleId = try windowRoles.id(for: WindowRole(role: s.windowRole, subrole: s.windowSubrole))
         try insertRow.run([
             .int(startMs), .int(endMs),
-            SQLValue(appID), SQLValue(titleID), SQLValue(pathID), SQLValue(urlID), SQLValue(pageTitleID), SQLValue(windowRoleID),
-            SQLValue(s.isIdle), SQLValue(s.isScreenLocked), SQLValue(s.isMainWindow), SQLValue(s.isFullScreen),
+            SqlValue(appId), SqlValue(titleId), SqlValue(documentPathId), SqlValue(pageUrlId), SqlValue(pageTitleId), SqlValue(windowRoleId),
+            SqlValue(s.isInputIdle), SqlValue(s.isScreenLocked), SqlValue(s.isMainWindow), SqlValue(s.isFullScreen),
         ])
-        return db.lastInsertRowID
+        return db.lastInsertRowId
     }
 
-    func setEnd(_ endMs: Int64, rowID: Int64) throws {
-        try updateEnd.run([.int(endMs), .int(rowID)])
+    func setEnd(_ endMs: Int64, rowId: Int64) throws {
+        try updateEnd.run([.int(endMs), .int(rowId)])
     }
 
-    func delete(rowID: Int64) throws {
-        try deleteRow.run([.int(rowID)])
+    func delete(rowId: Int64) throws {
+        try deleteRow.run([.int(rowId)])
     }
 }

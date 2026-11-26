@@ -1,5 +1,5 @@
 {
-  "bundleID" : "notion.id",
+  "bundleId" : "notion.id",
   "bundlePath" : "/Applications/Notion.app",
   "live" : {
     "chosen" : 0,

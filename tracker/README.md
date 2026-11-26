@@ -1,8 +1,10 @@
 # Time Tracker: activity tracker
 
-Swift menu-bar-less agent that records raw activity into `~/Library/Application Support/com.raquo.timetracker/timetracker.db`. See `../notes/PLAN.md`, `../notes/tracking-techniques.md` and `../notes/electron-and-claude.md`.
+A Swift agent without a menu bar item that records raw activity into `~/Library/Application Support/com.raquo.timetracker/timetracker.db`. This file covers building, running and inspecting it.
 
-Records now: frontmost app, window title and kind (role, subrole, main, full screen), document path (`AXDocument`), page URL and title in apps that show web pages (browsers, Claude, …; found by probing), idle (≥ 60 s without input, backdated to the last input), screen lock, sleep gaps. URLs are scrubbed before writing: no fragment, and credentials and secret-looking parameter values replaced with `REDACTED` (see `URLScrubber.swift`). A changed sample is recorded only once a second sample ~400 ms later agrees (`Settler.swift`). Not yet: power assertions, camera/mic, menu bar item. Samples on Accessibility events, on clicks, and on a 5 s poll; see `../notes/tracking-techniques.md`.
+- What it records and what the tables mean: [docs/data-model.md](../docs/data-model.md).
+- The rules it follows: [docs/tracker-principles.md](../docs/tracker-principles.md). How it fits with the server: [docs/architecture.md](../docs/architecture.md).
+- Topics not yet moved into docs (sampling and settling, URL scrubbing, idle, consistency): [notes/PLAN.md](../notes/PLAN.md), [tracking-techniques.md](../notes/tracking-techniques.md), [electron-and-claude.md](../notes/electron-and-claude.md).
 
 ## One-time setup: signing identity
 
@@ -29,7 +31,7 @@ For a quick test without installing: `ALLOW_ADHOC=1 scripts/build.sh`, copy `bui
 
 ## Page URL and title from app web content
 
-The tracker records the URL and title of the page in the focused window (`url_id`, `page_title_id`), read from the app's web Accessibility tree, in apps where that's worth it. Which apps is decided per app (`PageReadingPolicy.swift`, "Adaptive page reading" in `../notes/PLAN.md`):
+The tracker records the URL and title of the page in the focused window (`page_url_id`, `page_title_id`), read from the app's web Accessibility tree, in apps where that's worth it. Which apps is decided per app (`PageReadingPolicy.swift`, "Adaptive page reading" in `../notes/PLAN.md`):
 
 - **Probing:** an app nobody has decided on gets one search of its focused window when that's a window not probed last in the app, and about once a minute, recording no page meanwhile. Electron apps (they ship `Electron Framework.framework`) get their tree switched on first (`AXManualAccessibility`), which costs them some CPU and memory until they quit; browsers and other apps expose their pages without a switch.
 - **Probe result** (`tracker_app_page_probe`): a content page seen → on (page read on every sample, with observers); none seen in 30 min of active use (with a focused window to probe) within one run → off. A row appears at an app's first probe (`has_content_pages` NULL until decided), with `probe_count` and first / last probe times, saved on the first probe, on a decision, and on quit / sleep.
@@ -60,7 +62,7 @@ To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --arg
   - `PageReading/`: finding the page in a window (`PageSearch`, pure tree reads), deciding per app whether to read pages (`PageReadingPolicy`) and its tables (`PageReadingStore`).
   - `Accessibility/`: `AXUIElement` reads and the `AccessibilityNode` protocol, change notifications (`WindowObserver`), switching Electron trees on.
   - `Storage/`: SQLite wrapper, schema migrations, lookup tables.
-  - `Privacy/`: `URLScrubber`.
+  - `Privacy/`: `UrlScrubber`.
   - `Apps/`: app-specific code (`Claude.swift`; `Browsers.swift`, not used yet). `Diagnostics/`: the `--dump-ax` tool.
 - `Tests/TrackerCoreTests/`: `swift test` (Swift Testing; works with the Command Line Tools, no Xcode needed).
   `Support/` holds a temporary migrated database and harnesses that drive `Recorder` (directly, or through `Settler` like `Tracker.tick`) and `PageReadingPolicy` (like `Sampler`) with times relative to `t0`. Tests compare whole stored rows, read back with lookups resolved, and every read checks that rows never overlap. `RecorderHarness.closeInterval` takes a last sample before closing, like `Tracker.closeInterval`. `FakeNode` is a hand-built Accessibility element, so `PageSearch` runs without a live app. Failed writes are simulated with a TEMP trigger that raises an error (`TempDatabase.failWrites`), so no mocks. Use `withKnownIssue` to pin a known gap (stating the wanted result), so fixing it shows up as a test to update.
@@ -73,13 +75,13 @@ Seams for tests: the pure parts take time as `atMs` arguments (`Settler`, `Recor
 sqlite3 ~/Library/Application\ Support/com.raquo.timetracker/timetracker.db "
   SELECT datetime(i.start_ms / 1000, 'unixepoch', 'localtime') AS start,
          (i.end_ms - i.start_ms) / 1000 AS secs, a.name, t.title, pt.title AS page_title, u.url, p.path,
-         w.subrole, i.is_idle, i.is_screen_locked
+         w.subrole, i.is_input_idle, i.is_screen_locked
   FROM tracker_interval i
   LEFT JOIN tracker_app a ON a.id = i.app_id
   LEFT JOIN tracker_title t ON t.id = i.title_id
   LEFT JOIN tracker_title pt ON pt.id = i.page_title_id
-  LEFT JOIN tracker_url u ON u.id = i.url_id
-  LEFT JOIN tracker_path p ON p.id = i.path_id
+  LEFT JOIN tracker_url u ON u.id = i.page_url_id
+  LEFT JOIN tracker_path p ON p.id = i.document_path_id
   LEFT JOIN tracker_window_role w ON w.id = i.window_role_id
   ORDER BY i.start_ms DESC LIMIT 30"
 ```

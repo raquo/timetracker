@@ -8,7 +8,7 @@ struct SettlerTests {
     private let a = Fixtures.youtube
     private let b = Fixtures.hackerNews
     /// The in-between state while switching from a to b: new URL, old title.
-    private let bHalf = Fixtures.firefox(Fixtures.hackerNews.url, Fixtures.youtube.pageTitle)
+    private let bHalf = Fixtures.firefox(Fixtures.hackerNews.pageUrl, Fixtures.youtube.pageTitle)
 
     private struct Step {
         let snapshot: Snapshot

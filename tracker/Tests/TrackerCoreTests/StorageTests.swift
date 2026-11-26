@@ -16,7 +16,7 @@ struct StorageTests {
     @Test func canonicallyEquivalentTitlesAreStoredAsReported() throws {
         #expect(nfc == nfd, "the premise: Swift considers them equal")
         let h = try RecorderHarness()
-        let base = Snapshot(bundleID: "com.apple.TextEdit", appName: "TextEdit", bundlePath: "/System/Applications/TextEdit.app")
+        let base = Snapshot(bundleId: "com.apple.TextEdit", appName: "TextEdit", bundlePath: "/System/Applications/TextEdit.app")
         var a = base
         a.windowTitle = nfc
         var b = base
@@ -44,18 +44,18 @@ struct StorageTests {
     @Test func lookupTellsCanonicallyEquivalentStringsApart() throws {
         let temp = try TempDatabase()
         let titles = try Lookup(db: temp.db, table: "tracker_title", column: "title")
-        let nfcID = try #require(try titles.id(for: nfc))
-        let nfdID = try #require(try titles.id(for: nfd))
-        #expect(nfcID != nfdID)
+        let nfcId = try #require(try titles.id(for: nfc))
+        let nfdId = try #require(try titles.id(for: nfd))
+        #expect(nfcId != nfdId)
         // Cached now, and the same again from a fresh cache (as after a restart).
-        #expect(try titles.id(for: nfc) == nfcID)
-        #expect(try titles.id(for: nfd) == nfdID)
+        #expect(try titles.id(for: nfc) == nfcId)
+        #expect(try titles.id(for: nfd) == nfdId)
         let fresh = try Lookup(db: temp.db, table: "tracker_title", column: "title")
-        #expect(try fresh.id(for: nfd) == nfdID)
-        #expect(try fresh.id(for: nfc) == nfcID)
+        #expect(try fresh.id(for: nfd) == nfdId)
+        #expect(try fresh.id(for: nfc) == nfcId)
         #expect(try temp.db.query("SELECT id, hex(title) FROM tracker_title ORDER BY id") == [
-            [.int(nfcID), .text(hex(nfc))],
-            [.int(nfdID), .text(hex(nfd))],
+            [.int(nfcId), .text(hex(nfc))],
+            [.int(nfdId), .text(hex(nfd))],
         ])
     }
 
@@ -63,10 +63,10 @@ struct StorageTests {
         let temp = try TempDatabase()
         let titles = try Lookup(db: temp.db, table: "tracker_title", column: "title")
         let withNul = "a\u{0}b"
-        let withNulID = try #require(try titles.id(for: withNul))
-        let aID = try #require(try titles.id(for: "a"))
-        #expect(withNulID != aID)
-        #expect(try temp.db.query("SELECT hex(title), length(CAST(title AS BLOB)) FROM tracker_title WHERE id = ?", [.int(withNulID)]) == [
+        let withNulId = try #require(try titles.id(for: withNul))
+        let aId = try #require(try titles.id(for: "a"))
+        #expect(withNulId != aId)
+        #expect(try temp.db.query("SELECT hex(title), length(CAST(title AS BLOB)) FROM tracker_title WHERE id = ?", [.int(withNulId)]) == [
             [.text("610062"), .int(3)],
         ])
         let read = try temp.db.query("SELECT title FROM tracker_title ORDER BY id")
@@ -77,7 +77,7 @@ struct StorageTests {
     @Test func appNameIsUpdatedToTheReportedBytes() throws {
         let temp = try TempDatabase()
         let apps = try AppLookup(db: temp.db)
-        var s = Snapshot(bundleID: "com.example.cafe", appName: nfc, bundlePath: "/Applications/Cafe.app")
+        var s = Snapshot(bundleId: "com.example.cafe", appName: nfc, bundlePath: "/Applications/Cafe.app")
         let id = try #require(try apps.id(for: s))
         s.appName = nfd
         #expect(try apps.id(for: s) == id)

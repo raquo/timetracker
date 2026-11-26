@@ -26,7 +26,7 @@ import Foundation
 ///   `?continue=https://…`): such a value is replaced by its scrubbed URL, re-encoded.
 /// - The content of a `data:` URL (`data:image/png;base64,…`): it's the page itself. Its media
 ///   type stays.
-enum URLScrubber {
+enum UrlScrubber {
     /// What replaces a hidden value. Needs no percent-encoding.
     static let redacted = "REDACTED"
 
@@ -61,7 +61,7 @@ enum URLScrubber {
     /// all, rather than recorded unscrubbed.
     static func scrub(_ url: URL) -> String? {
         if url.scheme?.lowercased() == "data" {
-            return scrubDataURL(url.absoluteString)
+            return scrubDataUrl(url.absoluteString)
         }
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return nil
@@ -123,7 +123,7 @@ enum URLScrubber {
         if redactedNames.matches(name) {
             return redacted
         }
-        if let nested = scrubNestedURL(value, depth: depth) {
+        if let nested = scrubNestedUrl(value, depth: depth) {
             return nested
         }
         if isEmailAddress(value) {
@@ -134,7 +134,7 @@ enum URLScrubber {
 
     /// `data:<media type>,<content>` → `data:<media type>,REDACTED`. Empty content stays. nil
     /// without the comma: not a data URL we can take apart.
-    private static func scrubDataURL(_ url: String) -> String? {
+    private static func scrubDataUrl(_ url: String) -> String? {
         guard let comma = url.firstIndex(of: ",") else {
             return nil
         }
@@ -145,7 +145,7 @@ enum URLScrubber {
     /// If the percent-encoded `value` is a URL (absolute, or a path starting with `/`) that
     /// scrubbing changes: the scrubbed URL, percent-encoded as a parameter value, or redacted if
     /// an email address is left in it (in its path). Else nil.
-    private static func scrubNestedURL(_ value: String, depth: Int) -> String? {
+    private static func scrubNestedUrl(_ value: String, depth: Int) -> String? {
         guard depth < maxNestingDepth, let decoded = value.removingPercentEncoding, decoded.hasPrefix("/") || decoded.contains("://") else {
             return nil
         }

@@ -63,12 +63,12 @@ final class WindowObserver {
         }
         if let old = pageElement {
             AXObserverRemoveNotification(observer, old, kAXTitleChangedNotification as CFString)
-            AXObserverRemoveNotification(observer, old, AXName.loadCompleteNotification as CFString)
+            AXObserverRemoveNotification(observer, old, AxName.loadCompleteNotification as CFString)
         }
         pageElement = page
         if let page {
             AXObserverAddNotification(observer, page, kAXTitleChangedNotification as CFString, refcon)
-            AXObserverAddNotification(observer, page, AXName.loadCompleteNotification as CFString, refcon)
+            AXObserverAddNotification(observer, page, AxName.loadCompleteNotification as CFString, refcon)
         }
     }
 

@@ -3,7 +3,7 @@ import Foundation
 
 /// A recorded Accessibility tree: an app's focused window, trimmed to what the tracker reads,
 /// and what the tracker's page search found on it live. Written by `--dump-ax … --json` (see
-/// `AXDump`), replayed in tests on `FakeNode`s.
+/// `AxDump`), replayed in tests on `FakeNode`s.
 ///
 /// Recorded, and nothing else (labels, values and page text never are):
 /// - every element: role and subrole;
@@ -13,12 +13,12 @@ import Foundation
 /// Trimmed where `PageSearch` stops: the contents of web areas and toolbars, and past
 /// `maxNodes` / `maxDepth`. Except the branch down to the element holding keyboard focus, which
 /// `PageSearch.choose` walks up from.
-struct AXFixture: Codable, Equatable {
+struct AxFixture: Codable, Equatable {
     struct Node: Codable, Equatable {
         var attributes: [String: Attribute]
         /// nil: none recorded.
         var children: [Node]?
-        /// Some children weren't recorded (see `AXFixture`). nil rather than false, to keep files short.
+        /// Some children weren't recorded (see `AxFixture`). nil rather than false, to keep files short.
         var isTrimmed: Bool?
     }
 
@@ -60,7 +60,7 @@ struct AXFixture: Codable, Equatable {
         var chosen: Int?
     }
 
-    var bundleID: String
+    var bundleId: String
     var bundlePath: String?
     var window: Node
     /// Child indices from the window down to the element holding keyboard focus. nil: nothing
@@ -84,14 +84,14 @@ struct AXFixture: Codable, Equatable {
     }
 
     /// Records `window` of `app`, searching it first.
-    static func capture<N: AccessibilityNode>(app: N, window: N, bundleID: String, bundlePath: String?) -> AXFixture where N.Element == N {
+    static func capture<N: AccessibilityNode>(app: N, window: N, bundleId: String, bundlePath: String?) -> AxFixture where N.Element == N {
         let live = search(app: app, window: window, bundlePath: bundlePath)
         let chain = focusChain(app: app, window: window)
         var count = 0
         var focusPath: [Int] = []
         let root = node(window, isWindow: true, isWithinCut: false, chain: chain ?? [], depth: 0, count: &count, focusPath: &focusPath)
-        return AXFixture(
-            bundleID: bundleID,
+        return AxFixture(
+            bundleId: bundleId,
             bundlePath: bundlePath,
             window: root,
             focusPath: chain == nil ? nil : focusPath,
@@ -105,15 +105,15 @@ struct AXFixture: Codable, Equatable {
         return try encoder.encode(self)
     }
 
-    static func decode(_ data: Data) throws -> AXFixture {
-        try JSONDecoder().decode(AXFixture.self, from: data)
+    static func decode(_ data: Data) throws -> AxFixture {
+        try JSONDecoder().decode(AxFixture.self, from: data)
     }
 
     /// The window, then each element down to the one holding focus. nil if nothing holds focus
     /// or walking up from it doesn't reach `window`.
     private static func focusChain<N: AccessibilityNode>(app: N, window: N) -> [N]? where N.Element == N {
         var chain: [N] = []
-        var element = app.focusedUIElement
+        var element = app.focusedUiElement
         for _ in 0..<PageSearch.maxParentHops {
             guard let current = element else {
                 return nil
@@ -140,7 +140,7 @@ struct AXFixture: Codable, Equatable {
     ) -> Node where N.Element == N {
         count += 1
         let role = element.role
-        let isWebArea = role == AXName.webAreaRole
+        let isWebArea = role == AxName.webAreaRole
         var attributes: [String: Attribute] = [:]
         var names = [kAXRoleAttribute, kAXSubroleAttribute]
         if isWindow {
@@ -154,11 +154,11 @@ struct AXFixture: Codable, Equatable {
                 attributes[name] = .string(s)
             }
         }
-        if isWebArea, let url = element.url(AXName.url) {
-            attributes[AXName.url] = .string(url.absoluteString)
+        if isWebArea, let url = element.url(AxName.url) {
+            attributes[AxName.url] = .string(url.absoluteString)
         }
         if isWindow {
-            for name in [kAXMainAttribute, AXName.fullScreen] {
+            for name in [kAXMainAttribute, AxName.fullScreen] {
                 if let b = element.bool(name) {
                     attributes[name] = .bool(b)
                 }

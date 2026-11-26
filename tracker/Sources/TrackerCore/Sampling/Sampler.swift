@@ -4,12 +4,12 @@ import ApplicationServices
 /// A snapshot, plus what the tracker needs to know about where it came from.
 struct Sample {
     let snapshot: Snapshot
-    /// When `snapshot.isIdle`: the time of the last user input.
+    /// When `snapshot.isInputIdle`: the time of the last user input.
     let idleSinceMs: Int64?
-    let frontmostPID: pid_t?
+    let frontmostPid: pid_t?
     /// Whether the frontmost app's pages are read (page reading is on), so its pages need watching.
     let isReadingPages: Bool
-    /// The page element `snapshot.url` was read from, to watch for changes.
+    /// The page element `snapshot.pageUrl` was read from, to watch for changes.
     let pageElement: AXUIElement?
 }
 
@@ -37,7 +37,7 @@ final class Sampler {
             return Sample(
                 snapshot: Snapshot(isScreenLocked: true),
                 idleSinceMs: nil,
-                frontmostPID: nil,
+                frontmostPid: nil,
                 isReadingPages: false,
                 pageElement: nil
             )
@@ -48,7 +48,7 @@ final class Sampler {
         var hasProbeableWindow = false
         let frontmost = NSWorkspace.shared.frontmostApplication
         if let app = frontmost {
-            snapshot.bundleID = app.bundleIdentifier
+            snapshot.bundleId = app.bundleIdentifier
             snapshot.appName = app.localizedName
             snapshot.bundlePath = app.bundleURL?.path
             snapshot.executablePath = app.executableURL?.path
@@ -61,7 +61,7 @@ final class Sampler {
             if let window = Self.readFocusedWindow(of: appElement, into: &snapshot), let identity {
                 hasProbeableWindow = true
                 page = readPage(mode: mode, app: identity, appElement: appElement, pid: pid, window: window, bundlePath: snapshot.bundlePath, atMs: nowMs)
-                snapshot.url = page?.url
+                snapshot.pageUrl = page?.url
                 snapshot.pageTitle = page?.title
             }
         }
@@ -69,14 +69,14 @@ final class Sampler {
         var idleSinceMs: Int64? = nil
         // isFinite: Int64(Double) traps on infinity or NaN.
         if idleSeconds.isFinite && idleSeconds >= Self.idleThresholdSeconds {
-            snapshot.isIdle = true
+            snapshot.isInputIdle = true
             idleSinceMs = nowMs - Int64(min(idleSeconds, 365 * 24 * 3600) * 1000)
         }
-        pageReading.noteSample(app: identity, mode: mode, isActive: !snapshot.isIdle, hasProbeableWindow: hasProbeableWindow, atMs: nowMs)
+        pageReading.noteSample(app: identity, mode: mode, isActive: !snapshot.isInputIdle, hasProbeableWindow: hasProbeableWindow, atMs: nowMs)
         return Sample(
             snapshot: snapshot,
             idleSinceMs: idleSinceMs,
-            frontmostPID: frontmost?.processIdentifier,
+            frontmostPid: frontmost?.processIdentifier,
             // A probe that found a page has just switched page reading on.
             isReadingPages: mode == .on || page != nil,
             pageElement: page?.element
@@ -118,15 +118,15 @@ final class Sampler {
         snapshot.windowRole = window.role
         snapshot.windowSubrole = window.string(kAXSubroleAttribute)
         snapshot.isMainWindow = window.bool(kAXMainAttribute)
-        snapshot.isFullScreen = window.bool(AXName.fullScreen)
-        snapshot.documentPath = window.string(kAXDocumentAttribute).flatMap(Self.documentPath(fromAXDocument:))
+        snapshot.isFullScreen = window.bool(AxName.fullScreen)
+        snapshot.documentPath = window.string(kAXDocumentAttribute).flatMap(Self.documentPath(fromAxDocument:))
         return window
     }
 
     /// AXDocument is a URL string, usually file://. File URLs are stored as plain paths. Other
     /// URLs (Chrome reports the tab's `https://…`) are scrubbed like page URLs, and like them
     /// not recorded if they can't be (nil). Anything else is kept as reported.
-    static func documentPath(fromAXDocument doc: String) -> String? {
+    static func documentPath(fromAxDocument doc: String) -> String? {
         guard let url = URL(string: doc), url.scheme != nil else {
             // Not taken apart, so not scrubbed: only if it doesn't look like a URL.
             return doc.contains("://") ? nil : doc
@@ -135,7 +135,7 @@ final class Sampler {
             return url.path
         }
         else {
-            return URLScrubber.scrub(url)
+            return UrlScrubber.scrub(url)
         }
     }
 }

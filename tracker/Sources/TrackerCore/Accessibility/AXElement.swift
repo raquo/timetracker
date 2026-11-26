@@ -2,7 +2,7 @@ import ApplicationServices
 import Foundation
 
 /// Accessibility names that have no `kAX…` constant in the SDK.
-enum AXName {
+enum AxName {
     static let fullScreen = "AXFullScreen"
     static let url = "AXURL"
     static let domIdentifier = "AXDOMIdentifier"
@@ -26,7 +26,7 @@ enum Accessibility {
 }
 
 /// The attribute reads that reading a window and searching its tree need (`Sampler`,
-/// `PageSearch`), so they run the same on live `AXUIElement`s and on recorded trees (`AXFixture`). `==` is element identity (`CFEqual`).
+/// `PageSearch`), so they run the same on live `AXUIElement`s and on recorded trees (`AxFixture`). `==` is element identity (`CFEqual`).
 ///
 /// `Element` is the type itself. It can't be spelled `Self`: `AXUIElement` is a non-final class.
 /// Generic code states `where Node.Element == Node`.
@@ -58,7 +58,7 @@ extension AccessibilityNode {
         element(kAXFocusedWindowAttribute)
     }
 
-    var focusedUIElement: Element? {
+    var focusedUiElement: Element? {
         element(kAXFocusedUIElementAttribute)
     }
 }

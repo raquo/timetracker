@@ -2,11 +2,11 @@
 
 ## `ax/`: recorded Accessibility trees
 
-Each file is an `AXFixture`: an app's focused window, trimmed to what the tracker reads, plus
-what the tracker's page search found on it live. `AXReplayTests` replays each one and checks:
+Each file is an `AxFixture`: an app's focused window, trimmed to what the tracker reads, plus
+what the tracker's page search found on it live. `AxReplayTests` replays each one and checks:
 
 - the replay finds the same as the live search did (so the fake elements behave like the real ones);
-- the snapshot the tracker would record from it, written by hand per fixture in `AXReplayTests.expected`.
+- the snapshot the tracker would record from it, written by hand per fixture in `AxReplayTests.expected`.
 
 To record one, with the app set up as wanted (it needn't be in front):
 

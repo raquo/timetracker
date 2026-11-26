@@ -4,7 +4,7 @@ import Testing
 @testable import TrackerCore
 
 /// Recorded Accessibility trees (`Fixtures/ax/`, see its README), replayed on `FakeNode`s.
-struct AXReplayTests {
+struct AxReplayTests {
     /// What the tracker records from each fixture: the window's attributes and the chosen page.
     /// App fields (bundle ID, name, paths) come from `NSWorkspace`, not the tree, so they're left out.
     static let expected: [String: Snapshot] = [
@@ -62,22 +62,22 @@ struct AXReplayTests {
             isMainWindow: true,
             isFullScreen: false,
             documentPath: documentPath,
-            url: url,
+            pageUrl: url,
             pageTitle: pageTitle
         )
     }
 
-    @Test(arguments: AXFixtures.names)
+    @Test(arguments: AxFixtures.names)
     func replayFindsWhatTheLiveSearchFound(name: String) throws {
-        let fixture = try AXFixtures.load(name)
+        let fixture = try AxFixtures.load(name)
         let replay = Replay(fixture)
-        #expect(AXFixture.search(app: replay.app, window: replay.window, bundlePath: fixture.bundlePath) == fixture.live)
+        #expect(AxFixture.search(app: replay.app, window: replay.window, bundlePath: fixture.bundlePath) == fixture.live)
     }
 
-    @Test(arguments: AXFixtures.names)
+    @Test(arguments: AxFixtures.names)
     func recordsTheExpectedSnapshot(name: String) throws {
-        let fixture = try AXFixtures.load(name)
-        let expected = try #require(Self.expected[name], "Write the expected snapshot for \(name) in AXReplayTests.expected")
+        let fixture = try AxFixtures.load(name)
+        let expected = try #require(Self.expected[name], "Write the expected snapshot for \(name) in AxReplayTests.expected")
         #expect(Self.snapshot(Replay(fixture), bundlePath: fixture.bundlePath) == expected)
     }
 
@@ -86,15 +86,15 @@ struct AXReplayTests {
         var snapshot = Snapshot()
         if let window = Sampler.readFocusedWindow(of: replay.app, into: &snapshot) {
             let page = PageSearch.choose(from: PageSearch.contentPages(in: window, bundlePath: bundlePath), app: replay.app)
-            snapshot.url = page?.url
+            snapshot.pageUrl = page?.url
             snapshot.pageTitle = page?.title
         }
         return snapshot
     }
 }
 
-/// `AXFixture.capture` on hand-built trees: what it records, and that the replay behaves the same.
-struct AXFixtureCaptureTests {
+/// `AxFixture.capture` on hand-built trees: what it records, and that the replay behaves the same.
+struct AxFixtureCaptureTests {
     private let bundlePath = "/Applications/Browser.app"
 
     /// A browser window with two pages side by side. The right one holds an iframe holding a
@@ -109,32 +109,32 @@ struct AXFixtureCaptureTests {
         ])
         let left = FakeNode.webArea("https://a.example.com/", title: "A", [FakeNode(kAXStaticTextRole, [kAXValueAttribute: "left text"])])
         left.attributes[kAXValueAttribute] = "page value"
-        left.attributes[AXName.domIdentifier] = "page-id"
+        left.attributes[AxName.domIdentifier] = "page-id"
         let addressBar = FakeNode(kAXTextFieldRole, [kAXValueAttribute: "a.example.com"])
         let toolbar = FakeNode(kAXToolbarRole, [:], [addressBar, FakeNode.webArea("https://tabstrip.example.com/")])
         let split = FakeNode(kAXSplitGroupRole, [kAXDescriptionAttribute: "Split view"], [left, right])
         let window = FakeNode(kAXWindowRole, [kAXTitleAttribute: "B - Browser", kAXSubroleAttribute: kAXStandardWindowSubrole, kAXDocumentAttribute: "https://b.example.com/doc?token=abc#h"], [toolbar, split])
-        window.flags = [kAXMainAttribute: true, AXName.fullScreen: false]
+        window.flags = [kAXMainAttribute: true, AxName.fullScreen: false]
         let app = FakeNode(kAXApplicationRole, [:], [window])
         app.focusedWindow = window
         app.focused = iframeField
         return (app, window, left, right, iframeField, addressBar)
     }
 
-    private func roundTrip(_ fixture: AXFixture) throws -> AXFixture {
-        try AXFixture.decode(fixture.encoded())
+    private func roundTrip(_ fixture: AxFixture) throws -> AxFixture {
+        try AxFixture.decode(fixture.encoded())
     }
 
-    private func strings(_ pairs: [String: String]) -> [String: AXFixture.Attribute] {
+    private func strings(_ pairs: [String: String]) -> [String: AxFixture.Attribute] {
         pairs.mapValues { .string($0) }
     }
 
     @Test func recordsWhatTheTrackerReadsAndNoMore() throws {
         let b = browser()
-        let fixture = try roundTrip(AXFixture.capture(app: b.app, window: b.window, bundleID: "com.example.Browser", bundlePath: bundlePath))
-        typealias Node = AXFixture.Node
+        let fixture = try roundTrip(AxFixture.capture(app: b.app, window: b.window, bundleId: "com.example.Browser", bundlePath: bundlePath))
+        typealias Node = AxFixture.Node
         let iframeBranch = Node(attributes: strings([kAXRoleAttribute: kAXGroupRole]), children: [
-            Node(attributes: strings([kAXRoleAttribute: AXName.webAreaRole, AXName.url: "https://docs.example.com/frame", kAXTitleAttribute: "Frame"]), children: [
+            Node(attributes: strings([kAXRoleAttribute: AxName.webAreaRole, AxName.url: "https://docs.example.com/frame", kAXTitleAttribute: "Frame"]), children: [
                 Node(attributes: strings([kAXRoleAttribute: kAXGroupRole]), children: [
                     Node(attributes: strings([kAXRoleAttribute: kAXTextAreaRole])),
                 ]),
@@ -147,23 +147,23 @@ struct AXFixtureCaptureTests {
             kAXDocumentAttribute: "https://b.example.com/doc?token=abc#h",
         ])
         windowAttributes[kAXMainAttribute] = .bool(true)
-        windowAttributes[AXName.fullScreen] = .bool(false)
-        let expected = AXFixture(
-            bundleID: "com.example.Browser",
+        windowAttributes[AxName.fullScreen] = .bool(false)
+        let expected = AxFixture(
+            bundleId: "com.example.Browser",
             bundlePath: bundlePath,
             window: Node(attributes: windowAttributes, children: [
                 // Not descended into: the address bar isn't on the way to the focus.
                 Node(attributes: strings([kAXRoleAttribute: kAXToolbarRole]), isTrimmed: true),
                 Node(attributes: strings([kAXRoleAttribute: kAXSplitGroupRole]), children: [
-                    Node(attributes: strings([kAXRoleAttribute: AXName.webAreaRole, AXName.url: "https://a.example.com/", kAXTitleAttribute: "A"]), isTrimmed: true),
+                    Node(attributes: strings([kAXRoleAttribute: AxName.webAreaRole, AxName.url: "https://a.example.com/", kAXTitleAttribute: "A"]), isTrimmed: true),
                     // Within a page only the branch to the focus: not the page text, not the button.
-                    Node(attributes: strings([kAXRoleAttribute: AXName.webAreaRole, AXName.url: "https://b.example.com/doc?token=abc#h", kAXTitleAttribute: "B"]), children: [iframeBranch], isTrimmed: true),
+                    Node(attributes: strings([kAXRoleAttribute: AxName.webAreaRole, AxName.url: "https://b.example.com/doc?token=abc#h", kAXTitleAttribute: "B"]), children: [iframeBranch], isTrimmed: true),
                 ]),
             ]),
             focusPath: [1, 1, 0, 0, 0, 0],
-            live: AXFixture.SearchResult(
+            live: AxFixture.SearchResult(
                 visited: 5,
-                pages: [AXFixture.Page(url: "https://a.example.com/", title: "A"), AXFixture.Page(url: "https://b.example.com/doc?token=REDACTED", title: "B")],
+                pages: [AxFixture.Page(url: "https://a.example.com/", title: "A"), AxFixture.Page(url: "https://b.example.com/doc?token=REDACTED", title: "B")],
                 chosen: 1
             )
         )
@@ -172,15 +172,15 @@ struct AXFixtureCaptureTests {
 
     @Test func replayBehavesLikeTheOriginal() throws {
         let b = browser()
-        let fixture = try roundTrip(AXFixture.capture(app: b.app, window: b.window, bundleID: "com.example.Browser", bundlePath: bundlePath))
+        let fixture = try roundTrip(AxFixture.capture(app: b.app, window: b.window, bundleId: "com.example.Browser", bundlePath: bundlePath))
         let replay = Replay(fixture)
         #expect(replay.focused?.role == kAXTextAreaRole)
-        #expect(AXFixture.search(app: replay.app, window: replay.window, bundlePath: bundlePath) == fixture.live)
+        #expect(AxFixture.search(app: replay.app, window: replay.window, bundlePath: bundlePath) == fixture.live)
         var original = Snapshot()
         _ = Sampler.readFocusedWindow(of: b.app, into: &original)
-        original.url = "https://b.example.com/doc?token=REDACTED"
+        original.pageUrl = "https://b.example.com/doc?token=REDACTED"
         original.pageTitle = "B"
-        #expect(AXReplayTests.snapshot(replay, bundlePath: bundlePath) == original)
+        #expect(AxReplayTests.snapshot(replay, bundlePath: bundlePath) == original)
         #expect(original == Snapshot(
             windowTitle: "B - Browser",
             windowRole: kAXWindowRole,
@@ -188,7 +188,7 @@ struct AXFixtureCaptureTests {
             isMainWindow: true,
             isFullScreen: false,
             documentPath: "https://b.example.com/doc?token=REDACTED",
-            url: "https://b.example.com/doc?token=REDACTED",
+            pageUrl: "https://b.example.com/doc?token=REDACTED",
             pageTitle: "B"
         ))
     }
@@ -196,14 +196,14 @@ struct AXFixtureCaptureTests {
     @Test func focusInTheToolbarIsRecorded() throws {
         let b = browser()
         b.app.focused = b.addressBar
-        let fixture = try roundTrip(AXFixture.capture(app: b.app, window: b.window, bundleID: "com.example.Browser", bundlePath: bundlePath))
+        let fixture = try roundTrip(AxFixture.capture(app: b.app, window: b.window, bundleId: "com.example.Browser", bundlePath: bundlePath))
         #expect(fixture.focusPath == [0, 0])
         #expect(fixture.window.children?[0].children?.count == 1)
         // Split view with the focus outside both pages: rather no page than the wrong one.
         #expect(fixture.live.chosen == nil)
         let replay = Replay(fixture)
         #expect(replay.focused?.role == kAXTextFieldRole)
-        #expect(AXFixture.search(app: replay.app, window: replay.window, bundlePath: bundlePath) == fixture.live)
+        #expect(AxFixture.search(app: replay.app, window: replay.window, bundlePath: bundlePath) == fixture.live)
     }
 
     @Test func focusOutsideTheWindowIsNotRecorded() throws {
@@ -211,25 +211,25 @@ struct AXFixtureCaptureTests {
         let otherWindow = FakeNode(kAXWindowRole, [:], [FakeNode(kAXTextFieldRole)])
         b.app.add(otherWindow)
         b.app.focused = otherWindow.children[0]
-        let fixture = try roundTrip(AXFixture.capture(app: b.app, window: b.window, bundleID: "com.example.Browser", bundlePath: bundlePath))
+        let fixture = try roundTrip(AxFixture.capture(app: b.app, window: b.window, bundleId: "com.example.Browser", bundlePath: bundlePath))
         #expect(fixture.focusPath == nil)
         #expect(Replay(fixture).focused == nil)
         b.app.focused = nil
-        #expect(try roundTrip(AXFixture.capture(app: b.app, window: b.window, bundleID: "com.example.Browser", bundlePath: bundlePath)).focusPath == nil)
+        #expect(try roundTrip(AxFixture.capture(app: b.app, window: b.window, bundleId: "com.example.Browser", bundlePath: bundlePath)).focusPath == nil)
     }
 
     /// Past `maxNodes` nothing more is recorded, but the search's budget ends well before that,
     /// so the replay still visits the same elements.
     @Test func hugeTreeIsCutAtMaxNodes() throws {
-        let groups = (0..<(AXFixture.maxNodes + 500)).map { _ in FakeNode(kAXGroupRole) }
+        let groups = (0..<(AxFixture.maxNodes + 500)).map { _ in FakeNode(kAXGroupRole) }
         let window = FakeNode(kAXWindowRole, [:], groups + [FakeNode.webArea("https://example.com/")])
         let app = FakeNode(kAXApplicationRole, [:], [window])
         app.focusedWindow = window
-        let fixture = try roundTrip(AXFixture.capture(app: app, window: window, bundleID: "com.example.Big", bundlePath: nil))
-        #expect(fixture.window.children?.count == AXFixture.maxNodes - 1)
+        let fixture = try roundTrip(AxFixture.capture(app: app, window: window, bundleId: "com.example.Big", bundlePath: nil))
+        #expect(fixture.window.children?.count == AxFixture.maxNodes - 1)
         #expect(fixture.window.isTrimmed == true)
-        #expect(fixture.live == AXFixture.SearchResult(visited: PageSearch.budget, pages: [], chosen: nil))
+        #expect(fixture.live == AxFixture.SearchResult(visited: PageSearch.budget, pages: [], chosen: nil))
         let replay = Replay(fixture)
-        #expect(AXFixture.search(app: replay.app, window: replay.window, bundlePath: nil) == fixture.live)
+        #expect(AxFixture.search(app: replay.app, window: replay.window, bundlePath: nil) == fixture.live)
     }
 }

@@ -77,7 +77,7 @@ final class PageReadingStore {
     func save(_ probes: AppPageProbes, for app: AppIdentity) throws {
         try upsertProbes.run([
             .int(app.type.rawValue), .text(app.identifier),
-            SQLValue(probes.hasContentPages), SQLValue(probes.decidedAtMs),
+            SqlValue(probes.hasContentPages), SqlValue(probes.decidedAtMs),
             .int(probes.probeCount), .int(probes.firstProbeAtMs), .int(probes.lastProbeAtMs),
         ])
     }
@@ -115,7 +115,7 @@ final class PageReadingStore {
         return result
     }
 
-    private static func app(_ type: SQLValue, _ identifier: SQLValue) -> AppIdentity? {
+    private static func app(_ type: SqlValue, _ identifier: SqlValue) -> AppIdentity? {
         guard let type = type.int.flatMap(AppIdentifierType.init(rawValue:)), let identifier = identifier.text else {
             return nil
         }

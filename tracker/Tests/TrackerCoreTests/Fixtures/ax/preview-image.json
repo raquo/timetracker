@@ -1,5 +1,5 @@
 {
-  "bundleID" : "com.apple.Preview",
+  "bundleId" : "com.apple.Preview",
   "bundlePath" : "/System/Applications/Preview.app",
   "focusPath" : [
     0,
