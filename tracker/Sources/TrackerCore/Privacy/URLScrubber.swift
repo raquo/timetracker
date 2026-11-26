@@ -4,8 +4,7 @@ import Foundation
 /// replaced with `redacted`, keeping the name, so the URL keeps its shape and says that a secret
 /// was there (a sign-in or password reset link), like logging tools do (Rails' `[FILTERED]`,
 /// OpenTelemetry's `REDACTED`). Applied to every URL before it reaches the database (privacy is
-/// enforced in the tracker, since a later cleanup can't un-write the file). See "URL fragments"
-/// and "Sensitive data in URLs" in notes/PLAN.md.
+/// enforced in the tracker, since a later cleanup can't un-write the file). See docs/url-scrubbing.md.
 ///
 /// Dropped:
 /// - The fragment (`#…`): usually a position within the page (Notion's `#<block-id>`), which would
@@ -20,6 +19,8 @@ import Foundation
 ///   email address (decoded repeatedly, so double encoding doesn't hide it). Other parameters
 ///   stay, since some say what's open (`?v=` on YouTube, `?q=` in searches). Empty values stay:
 ///   nothing to hide.
+/// - Path segments that contain an email address (`/u/alice@example.com/profile` →
+///   `/u/REDACTED/profile`).
 /// - Path parameters under the same names (`/app;jsessionid=…`), and parameters after a `;` in
 ///   a query value (`?a=1;token=…`: some servers split the query on `;` too).
 /// - The same, recursively, in URLs carried as parameter values (`?next=/verify?token=…`,
@@ -92,7 +93,7 @@ enum UrlScrubber {
             components.password = redacted
             isChanged = true
         }
-        if let path = scrubPathParameters(components.percentEncodedPath) {
+        if let path = scrubPath(components.percentEncodedPath) {
             components.percentEncodedPath = path
             isChanged = true
         }
@@ -144,7 +145,7 @@ enum UrlScrubber {
 
     /// If the percent-encoded `value` is a URL (absolute, or a path starting with `/`) that
     /// scrubbing changes: the scrubbed URL, percent-encoded as a parameter value, or redacted if
-    /// an email address is left in it (in its path). Else nil.
+    /// an email address is still left in it (in a parameter name, say). Else nil.
     private static func scrubNestedUrl(_ value: String, depth: Int) -> String? {
         guard depth < maxNestingDepth, let decoded = value.removingPercentEncoding, decoded.hasPrefix("/") || decoded.contains("://") else {
             return nil
@@ -165,13 +166,18 @@ enum UrlScrubber {
         return scrubbed.addingPercentEncoding(withAllowedCharacters: unreservedCharacters)
     }
 
-    /// `path` with the values of path parameters (`/app;jsessionid=…`, Java servers' session ID)
-    /// under redacted names redacted, nil if there are none.
-    private static func scrubPathParameters(_ path: String) -> String? {
-        guard path.contains(";") else {
-            return nil
-        }
-        let scrubbed = path.split(separator: "/", omittingEmptySubsequences: false).map(scrubParameters).joined(separator: "/")
+    /// The percent-encoded `path` with segments that contain an email address redacted whole,
+    /// and the values of path parameters (`/app;jsessionid=…`, Java servers' session ID) under
+    /// redacted names redacted. nil if nothing changes.
+    private static func scrubPath(_ path: String) -> String? {
+        let scrubbed = path.split(separator: "/", omittingEmptySubsequences: false).map { segment in
+            if isEmailAddress(String(segment)) {
+                return redacted
+            }
+            else {
+                return scrubParameters(segment)
+            }
+        }.joined(separator: "/")
         return scrubbed == path ? nil : scrubbed
     }
 
@@ -203,7 +209,7 @@ enum UrlScrubber {
         return String(view)
     }
 
-    /// A percent-encoded parameter value that contains an email address (`alice%40example.com`,
+    /// A percent-encoded parameter value or path segment that contains an email address (`alice%40example.com`,
     /// or within a search like `q=mail+bob@example.com`). Decoded up to `maxNestingDepth + 1`
     /// times, so an address encoded twice inside a nested URL (`alice%2540example.com`) counts too.
     static func isEmailAddress(_ value: String?) -> Bool {

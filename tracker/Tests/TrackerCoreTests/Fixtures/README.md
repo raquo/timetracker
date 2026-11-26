@@ -1,5 +1,7 @@
 # Test fixtures
 
+What fixtures hold and how the replay tests use them: [docs/diagnostics.md](../../../../docs/diagnostics.md).
+
 ## `ax/`: recorded Accessibility trees
 
 Each file is an `AxFixture`: an app's focused window, trimmed to what the tracker reads, plus

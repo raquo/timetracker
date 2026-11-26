@@ -142,10 +142,19 @@ struct UrlScrubberTests {
         // Empty values have nothing to hide.
         ("https://example.com/?token=&code&x=1&sig=abc", "https://example.com/?token=&code&x=1&sig=REDACTED"),
         ("https://example.com/a;jsessionid=;token=t", "https://example.com/a;jsessionid=;token=REDACTED"),
-        // An email address left in a nested URL's path: the whole value is redacted. Its
-        // redacted user info doesn't count as one.
-        ("https://example.com/r?next=%2Fu%2Falice%40example.com%2Fprofile&x=1", "https://example.com/r?next=REDACTED&x=1"),
-        ("https://example.com/r?next=%2Fu%2Falice%40example.com%3Ftoken%3Dt&x=1", "https://example.com/r?next=REDACTED&x=1"),
+        // An email address in the path: that segment is redacted, encoded or not, with any
+        // path parameters in it. The rest of the path stays.
+        ("https://example.com/u/alice@example.com/profile?tab=1", "https://example.com/u/REDACTED/profile?tab=1"),
+        ("https://example.com/u/alice%40example.com", "https://example.com/u/REDACTED"),
+        ("https://example.com/u/alice%2540example.com/", "https://example.com/u/REDACTED/"),
+        ("https://example.com/a/x-bob@example.co.uk;v=1/b;token=t", "https://example.com/a/REDACTED/b;token=REDACTED"),
+        // A fediverse handle looks like one too: rather redacted than leaked.
+        ("https://mastodon.social/@alice@example.social", "https://mastodon.social/REDACTED"),
+        // The same in a nested URL's path. Its redacted user info doesn't count as one.
+        ("https://example.com/r?next=%2Fu%2Falice%40example.com%2Fprofile&x=1", "https://example.com/r?next=%2Fu%2FREDACTED%2Fprofile&x=1"),
+        ("https://example.com/r?next=%2Fu%2Falice%40example.com%3Ftoken%3Dt&x=1", "https://example.com/r?next=%2Fu%2FREDACTED%3Ftoken%3DREDACTED&x=1"),
+        // An email address left anywhere else in a nested URL (here a parameter name): the whole value is redacted.
+        ("https://example.com/r?next=%2Fx%3Falice%40example.com&x=1", "https://example.com/r?next=REDACTED&x=1"),
         ("https://example.com/r?next=https%3A%2F%2Falice%40example.com%2F", "https://example.com/r?next=https%3A%2F%2FREDACTED%40example.com%2F"),
         // Form field names (Rails, PHP): the innermost key counts, bracketed or encoded.
         ("https://example.com/session?user[login]=bob&user[remember]=1", "https://example.com/session?user%5Blogin%5D=REDACTED&user%5Bremember%5D=1"),
@@ -190,6 +199,9 @@ struct UrlScrubberTests {
         // An @ without a domain isn't an email address.
         "https://x.com/search?q=%40raquo&src=typed_query",
         "https://example.com/?q=a@b",
+        // Handles and scoped names in the path aren't email addresses.
+        "https://medium.com/@alice.smith/my-post-123",
+        "https://www.npmjs.com/package/@types/node",
         // Shapes seen in real use.
         "https://calendar.google.com/calendar/u/1/r/week/2026/11/25?ctz=America/Vancouver&hl=en_GB&es=1&csspa=1",
         "https://meet.google.com/abc-defg-hij?hs=224",
