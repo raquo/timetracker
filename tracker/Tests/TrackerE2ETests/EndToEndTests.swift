@@ -5,8 +5,8 @@ import Testing
 
 /// The real tracker (the build copy, which holds the Accessibility permission) recording into a
 /// temporary database, with its poll turned off, while the test drives three copies of
-/// `E2ETarget`, then a throwaway Google Chrome; then the rows are checked against what each step
-/// showed. Takes over the screen for about 90 s.
+/// `E2ETarget`, then a throwaway Google Chrome, then a throwaway Firefox; then the rows are
+/// checked against what each step showed. Takes over the screen for about 2 minutes.
 ///
 /// Run by scripts/e2e.sh, which builds the apps, makes the run folder, and cleans up after a
 /// crash. Skipped otherwise. Environment:
@@ -15,6 +15,8 @@ import Testing
 /// - `TIMETRACKER_E2E_RUN`: an empty folder for this run (database, pages, command files), where
 ///   the test leaves `checked` once it has checked the run;
 /// - `TIMETRACKER_E2E_CHROME`: the Chrome app to drive. Empty or not set: Chrome's steps are skipped.
+/// - `TIMETRACKER_E2E_FIREFOX`: the Firefox app to drive. Empty or not set: Firefox's steps are
+///   skipped.
 @Suite(.serialized, .enabled(if: E2E.isEnabled, "run by scripts/e2e.sh"))
 struct EndToEndTests {
     @Test func recordsWhatIsOnScreen() async throws {
@@ -134,6 +136,7 @@ struct EndToEndTests {
             try await c.send("closeWindow", ["id": "own"])
         }
         try await chromeSteps(run)
+        try await firefoxSteps(run)
     }
 
     /// Chrome reports the shown tab's URL as the window's document too, so `document` is the
@@ -207,6 +210,90 @@ struct EndToEndTests {
         try await run.step("Chrome: back", expect: shows("About Version", "chrome://version/")) {
             try await chrome.bringToFront(first)
             try await chrome.expectFocus(first)
+        }
+    }
+
+    /// Like Chrome's, with what's different in Firefox: the window is titled with the page title
+    /// alone and has no document; a URL change alone (`pushState`) updates the page's URL at
+    /// once but sends no event the tracker listens for (only the address bar's
+    /// `AXValueChanged`), so it's sampled on request; its own pages (`about:…`) can't be
+    /// loaded through BiDi, so they aren't stepped through.
+    private static func firefoxSteps(_ run: E2E.Run) async throws {
+        guard let firefox = run.firefox, let web = run.served else {
+            print("e2e: no Firefox given (TIMETRACKER_E2E_FIREFOX), its steps skipped")
+            return
+        }
+        let r = run.id
+        func shows(_ title: String, _ url: String) -> E2E.Expected {
+            E2E.Expected(app: firefox.app, window: title + E2E.Firefox.windowSuffix, url: url, page: title, document: nil)
+        }
+
+        // Firefox builds its page tree only once something asks for it, so the tracker's first
+        // probe, when Firefox comes to the front, may find no page. The retry 2 s later
+        // (`PageReadingPolicy.probeBackoff`) finds it; until then only the window is recorded.
+        var first: E2E.Firefox.Tab!
+        try await run.step(
+            "Firefox",
+            expect: shows("One \(r)", web.one),
+            mayFirstBe: E2E.Expected(app: firefox.app, window: "One \(r)" + E2E.Firefox.windowSuffix, url: nil, page: nil, document: nil),
+            extraLatencyMs: PageReadingPolicy.probeBackoff.firstDelayMs
+        ) {
+            first = try await firefox.launch(web.one)
+            try await firefox.expectFocus(first)
+        }
+        try await run.step("Firefox: navigate", expect: shows("Two \(r)", web.two)) {
+            try await firefox.navigate(first, web.two)
+        }
+        // Firefox renames the window after the tab, which the tracker hears (`AXTitleChanged`).
+        try await run.step("Firefox: page renames itself", expect: shows("Two renamed \(r)", web.two)) {
+            try await firefox.eval(first, "document.title = \(E2E.jsString("Two renamed \(r)"))")
+            try await firefox.waitUntil(first, "document.title === \(E2E.jsString("Two renamed \(r)"))", "the title didn't change")
+        }
+        // No event: sampled on request.
+        try await run.step("Firefox: pushState alone", expect: shows("Two renamed \(r)", web.moved)) {
+            try await firefox.eval(first, "history.pushState(null, '', \(E2E.jsString(E2E.Pages.movedPath)))")
+            try await firefox.waitUntil(first, "location.href === \(E2E.jsString(web.moved))", "pushState didn't change the URL")
+            run.sampleNow()
+        }
+        // With a secret, scrubbed; the title change triggers the sample.
+        try await run.step("Firefox: pushState and title", expect: shows("Pushed \(r)", web.pushedScrubbed)) {
+            try await firefox.eval(first, "history.pushState(null, '', \(E2E.jsString(E2E.Pages.pushedPath))); document.title = \(E2E.jsString("Pushed \(r)"))")
+            try await firefox.waitUntil(first, "location.href === \(E2E.jsString(web.pushed))", "pushState didn't change the URL")
+        }
+        // The fragment isn't recorded, so nothing changes.
+        try await run.step("Firefox: hash change", expect: shows("Pushed \(r)", web.pushedScrubbed)) {
+            try await firefox.eval(first, "location.hash = 'part'")
+            try await firefox.waitUntil(first, "location.hash === '#part'", "the hash didn't change")
+            run.sampleNow()
+        }
+        try await run.step("Firefox: secret in URL", expect: shows("Secret \(r)", web.secretScrubbed)) {
+            try await firefox.navigate(first, web.secret)
+        }
+        var second: E2E.Firefox.Tab!
+        try await run.step("Firefox: new tab", expect: shows("Three \(r)", web.three)) {
+            second = try await firefox.open(web.three)
+            try await firefox.expectFocus(second)
+        }
+        try await run.step("Firefox: first tab", expect: shows("Secret \(r)", web.secretScrubbed)) {
+            try await firefox.activate(first)
+            try await firefox.expectFocus(first)
+            try await firefox.waitUntil(second, "document.visibilityState === 'hidden'", "the second tab is still shown")
+        }
+        var window: E2E.Firefox.Tab!
+        try await run.step("Firefox: new window", expect: shows("One \(r)", web.one)) {
+            window = try await firefox.open(web.one, isNewWindow: true)
+            try await firefox.expectFocus(window)
+        }
+        try await run.step("Firefox: window closed", expect: shows("Secret \(r)", web.secretScrubbed)) {
+            try await firefox.close(window)
+            try await firefox.expectFocus(first)
+        }
+        try await run.step("Firefox: other app", expect: .init(run.b, window: "Bee \(r)", url: run.pages.bee, page: "Bee page \(r)")) {
+            try await run.activate(run.b)
+        }
+        try await run.step("Firefox: back", expect: shows("Secret \(r)", web.secretScrubbed)) {
+            try await firefox.bringToFront()
+            try await firefox.expectFocus(first)
         }
     }
 }
@@ -293,6 +380,15 @@ enum E2E {
         var endMs: Int64
         /// Its row must start before this (`Run.expectRowStart(before:)`).
         let rowStartsBeforeMs: Int64?
+        /// A state the tracker may record first, during a changeover that's longer by
+        /// `extraLatencyMs` (`Run.step`).
+        let mayFirstBe: Expected?
+        let extraLatencyMs: Int64
+
+        /// From when its rows must match `expected`.
+        var checkedFromMs: Int64 {
+            doneMs + E2E.latencyMs + extraLatencyMs
+        }
     }
 
     struct Row: CustomStringConvertible {
@@ -355,6 +451,10 @@ enum E2E {
         static let pushedPath = "pushed.html?session=abc&q=ok"
         let pushed: String
         let pushedScrubbed: String
+        /// Where `pushState` goes without a new title (relative, from `two`), and absolute. No
+        /// such file either.
+        static let movedPath = "moved.html?q=ok"
+        let moved: String
 
         /// `base` ends with a slash.
         init(base: String) {
@@ -368,6 +468,7 @@ enum E2E {
             secretScrubbed = base + "secret.html?token=REDACTED&q=ok"
             pushed = base + Self.pushedPath
             pushedScrubbed = base + "pushed.html?session=REDACTED&q=ok"
+            moved = base + Self.movedPath
         }
 
         /// Writes the files `init` names into `dir`. Titles carry the run ID.
@@ -499,7 +600,8 @@ enum E2E {
         /// Shows only its own UI (a page from its bundle), never content.
         let c: Target
         let chrome: Chrome?
-        /// The pages over HTTP, once the server runs (with Chrome only).
+        let firefox: Firefox?
+        /// The pages over HTTP, once the server runs (with a browser only).
         private(set) var served: Pages?
         var steps: [Step] = []
         private var server: PageServer?
@@ -517,7 +619,7 @@ enum E2E {
         }
 
         /// Fails unless every app given exists and the run folder exists and is empty: an old
-        /// database or Chrome profile in it would make the checks see a previous run.
+        /// database or browser profile in it would make the checks see a previous run.
         init() throws {
             id = String(UUID().uuidString.prefix(6))
             func folder(_ variable: String, isEmpty: Bool = false) throws -> URL {
@@ -558,6 +660,12 @@ enum E2E {
             else {
                 chrome = nil
             }
+            if let path = E2E.environment["TIMETRACKER_E2E_FIREFOX"], !path.isEmpty {
+                firefox = try Firefox(appUrl: try folder("TIMETRACKER_E2E_FIREFOX"), profile: dir.appendingPathComponent("firefox-profile"))
+            }
+            else {
+                firefox = nil
+            }
         }
 
         /// Starts the tracker and the target apps, runs `body`, stops the tracker. Cleans up
@@ -577,7 +685,7 @@ enum E2E {
 
         private func start() async throws {
             previousFront = try E2E.frontmostApp()
-            if chrome != nil {
+            if chrome != nil || firefox != nil {
                 let server = try PageServer(dir: dir.appendingPathComponent("pages"))
                 try await server.start()
                 self.server = server
@@ -613,8 +721,11 @@ enum E2E {
         }
 
         /// Runs `action` (its commands, and checks that they took effect), then holds for
-        /// `holdMs`. The step lasts from when `action` started until the next one does.
-        func step(_ name: String, expect expected: Expected, _ action: () async throws -> Void) async throws {
+        /// `holdMs` plus `extraLatencyMs`. The step lasts from when `action` started until the
+        /// next one does. For a change the tracker is known to see late: `mayFirstBe` is a state
+        /// it may record before `expected`, within `latencyMs` plus `extraLatencyMs` of the step
+        /// being done.
+        func step(_ name: String, expect expected: Expected, mayFirstBe: Expected? = nil, extraLatencyMs: Int64 = 0, _ action: () async throws -> Void) async throws {
             let sentMs = nowMs()
             if !steps.isEmpty {
                 steps[steps.count - 1].endMs = sentMs
@@ -622,8 +733,9 @@ enum E2E {
             rowStartsBeforeMs = nil
             try await action()
             let doneMs = nowMs()
-            steps.append(Step(name: name, expected: expected, sentMs: sentMs, doneMs: doneMs, endMs: doneMs + E2E.holdMs, rowStartsBeforeMs: rowStartsBeforeMs))
-            try await Task.sleep(for: .milliseconds(E2E.holdMs))
+            steps.append(Step(name: name, expected: expected, sentMs: sentMs, doneMs: doneMs, endMs: doneMs + E2E.holdMs + extraLatencyMs, rowStartsBeforeMs: rowStartsBeforeMs, mayFirstBe: mayFirstBe, extraLatencyMs: extraLatencyMs))
+            // Longer by the longer changeover, so as much of the step is checked as in others.
+            try await Task.sleep(for: .milliseconds(E2E.holdMs + extraLatencyMs))
         }
 
         /// Asks the tracker for a sample now (SIGUSR1), for a step whose change sends no event
@@ -685,9 +797,10 @@ enum E2E {
             a.pid = nil
             b.pid = nil
             c.pid = nil
-            // Before bringing back the app in front: if that's the user's Chrome, opening it while
-            // the test's is still quitting could reach the test's instead.
+            // Before bringing back the app in front: if that's the user's Chrome or Firefox, opening
+            // it while the test's is still quitting could reach the test's instead.
             await chrome?.quit()
+            await firefox?.quit()
             server?.stop()
             server = nil
             // Only if it's still running: opening an app that has quit would launch it again.
@@ -746,7 +859,8 @@ enum E2E {
         ///   showed;
         /// - before that (the changeover), any row that starts is already the step's: the row
         ///   in progress may go on (the previous state, checked by the previous step), but
-        ///   nothing in between, such as a page half loaded or an old title with the new URL;
+        ///   nothing in between, such as a page half loaded or an old title with the new URL.
+        ///   Except a step's `mayFirstBe`, in its longer changeover;
         /// - the first step doesn't find its row started before it (the tracker had recorded the
         ///   state before, `start`). For a later step that would mean a missed change, which
         ///   already fails the step before: its own state isn't what was recorded;
@@ -780,7 +894,7 @@ enum E2E {
             }
 
             for (i, step) in steps.enumerated() {
-                let checkedFrom = step.doneMs + E2E.latencyMs
+                let checkedFrom = step.checkedFromMs
                 let during = rows.filter { $0.endMs > checkedFrom && $0.startMs < step.endMs }
                 if during.isEmpty {
                     Issue.record("\(step.name): no row")
@@ -790,7 +904,8 @@ enum E2E {
                     Issue.record("\(step.name) at \(t(max(row.startMs, checkedFrom))): expected \(step.expected), got \(row)")
                 }
                 for row in rows where row.startMs >= step.sentMs && row.startMs < checkedFrom && row.endMs <= checkedFrom {
-                    if row.asExpected != step.expected || row.isScreenLocked != 0 {
+                    let isAllowed = row.asExpected == step.expected || (step.mayFirstBe != nil && row.asExpected == step.mayFirstBe)
+                    if !isAllowed || row.isScreenLocked != 0 {
                         Issue.record("\(step.name): passing row at \(t(row.startMs))–\(t(row.endMs)) during the changeover: \(row)")
                     }
                 }
@@ -847,13 +962,16 @@ enum E2E {
                 if probe.hasContentPages != 1 {
                     Issue.record("\(app): has_content_pages \(probe.hasContentPages.map(String.init) ?? "nil"), expected 1")
                 }
-                if let decided = probe.decidedAtMs, decided < step.sentMs || decided > step.doneMs + E2E.latencyMs {
-                    Issue.record("\(app): page reading decided at \(t(decided)), not during \"\(step.name)\", its first step with a page (\(t(step.sentMs))–\(t(step.doneMs + E2E.latencyMs)))")
+                if let decided = probe.decidedAtMs, decided < step.sentMs || decided > step.checkedFromMs {
+                    Issue.record("\(app): page reading decided at \(t(decided)), not during \"\(step.name)\", its first step with a page (\(t(step.sentMs))–\(t(step.checkedFromMs)))")
                 }
             }
 
             // For scripts/e2e.sh: `swift test` passes a skipped test too.
-            let note = "steps=\(steps.count)\nchrome=\(steps.contains { $0.expected.app.bundleId == chrome?.app.bundleId } ? 1 : 0)\n"
+            func ran(_ app: App?) -> Int {
+                steps.contains { $0.expected.app == app } ? 1 : 0
+            }
+            let note = "steps=\(steps.count)\nchrome=\(ran(chrome?.app))\nfirefox=\(ran(firefox?.app))\n"
             try note.write(to: dir.appendingPathComponent("checked"), atomically: true, encoding: .utf8)
         }
     }

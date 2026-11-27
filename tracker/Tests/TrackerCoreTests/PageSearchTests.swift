@@ -86,6 +86,27 @@ struct PageSearchTests {
         #expect(PageSearch.choose(from: pages, app: app(s.window, focus: nil)) == nil)
     }
 
+    /// Chrome with DevTools docked: the tab's page and DevTools are two content pages side by
+    /// side, and the one holding focus is recorded. Seen in the real data, 2026-11-24.
+    @Test func dockedDevToolsFollowsFocus() {
+        let pageField = FakeNode(kAXTextFieldRole)
+        let page = FakeNode.webArea("http://localhost:5273/dosing", title: "Dosing", [FakeNode(kAXGroupRole, [:], [pageField])])
+        let console = FakeNode(kAXTextAreaRole)
+        let devTools = FakeNode.webArea(
+            "devtools://devtools/bundled/devtools_app.html?remoteBase=https://chrome-devtools-frontend.appspot.com/serve_file/@0/&targetType=tab&can_dock=true",
+            title: "DevTools",
+            [FakeNode(kAXGroupRole, [:], [console])]
+        )
+        let addressBar = FakeNode(kAXTextFieldRole)
+        let w = window([page, devTools], toolbar: FakeNode(kAXToolbarRole, [:], [addressBar]))
+        let pages = PageSearch.contentPages(in: w, bundlePath: "/Applications/Google Chrome.app")
+        #expect(pages.map(\.element) == [page, devTools])
+        #expect(PageSearch.choose(from: pages, app: app(w, focus: console))?.title == "DevTools")
+        #expect(PageSearch.choose(from: pages, app: app(w, focus: pageField))?.url == "http://localhost:5273/dosing")
+        // Focus in the address bar: neither page, so none is recorded.
+        #expect(PageSearch.choose(from: pages, app: app(w, focus: addressBar)) == nil)
+    }
+
     /// A window holding `groups` empty groups, then a page.
     private func pageAfter(groups: Int) -> FakeNode {
         FakeNode(kAXWindowRole, [:], (0..<groups).map { _ in FakeNode(kAXGroupRole) } + [FakeNode.webArea("https://a.example.com/")])

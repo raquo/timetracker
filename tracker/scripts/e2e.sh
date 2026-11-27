@@ -1,16 +1,18 @@
 #!/bin/bash
 # End-to-end test: the real tracker (build/TimeTracker.app, which holds the Accessibility
 # permission) records into a temporary database while the test drives three copies of the
-# E2ETarget app, then a throwaway Google Chrome; then the rows are checked. See
-# Tests/TrackerE2ETests.
+# E2ETarget app, then a throwaway Google Chrome, then a throwaway Firefox; then the rows are
+# checked. See Tests/TrackerE2ETests.
 #
-# Takes over the screen for about 90 s: don't click or type meanwhile (moving the mouse is fine).
-# Your own tracker and Chrome keep running; your tracker records the run too.
+# Takes over the screen for about 2 minutes: don't click or type meanwhile (moving the mouse is
+# fine). Your own tracker, Chrome and Firefox keep running; your tracker records the run too.
 #
-# KEEP=1 keeps the run folder (database, pages, Chrome's profile) for a look afterwards, until
-# the next run.
+# KEEP=1 keeps the run folder (database, pages, the browsers' profiles) for a look afterwards,
+# until the next run.
 # TIMETRACKER_E2E_CHROME=<path to the app> drives another Chrome; set but empty, it skips
 # Chrome's steps.
+# TIMETRACKER_E2E_FIREFOX=<path to the app> likewise for Firefox. Not set: Firefox, else Firefox
+# Developer Edition, from /Applications.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/config.sh
@@ -24,6 +26,22 @@ TRACKER_BIN="$PWD/$BUILD_APP/Contents/MacOS/TimeTracker"
 CHROME="${TIMETRACKER_E2E_CHROME-/Applications/Google Chrome.app}"
 if [[ -n "$CHROME" && ! -d "$CHROME" ]]; then
     echo "error: no Chrome at $CHROME (TIMETRACKER_E2E_CHROME= skips Chrome's steps)" >&2
+    exit 1
+fi
+if [[ -z "${TIMETRACKER_E2E_FIREFOX+set}" ]]; then
+    FIREFOX="/Applications/Firefox.app"
+    if [[ ! -d "$FIREFOX" ]]; then
+        FIREFOX="/Applications/Firefox Developer Edition.app"
+    fi
+else
+    FIREFOX="$TIMETRACKER_E2E_FIREFOX"
+fi
+if [[ -n "$FIREFOX" && ! -d "$FIREFOX" ]]; then
+    if [[ -z "${TIMETRACKER_E2E_FIREFOX+set}" ]]; then
+        echo "error: neither Firefox nor Firefox Developer Edition is in /Applications (TIMETRACKER_E2E_FIREFOX= skips Firefox's steps)" >&2
+    else
+        echo "error: no Firefox at $FIREFOX (TIMETRACKER_E2E_FIREFOX= skips Firefox's steps)" >&2
+    fi
     exit 1
 fi
 
@@ -47,7 +65,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 echo $$ > "$LOCK/pid"
 
-# Leftovers of a run that died without cleaning up: its target apps and Chrome (their arguments
+# Leftovers of a run that died without cleaning up: its target apps and browsers (their arguments
 # name the run folder), a tracker running from the build copy (also stops a `--dump-ax` or
 # `--watch-ax` run from it), and run folders (a KEEP=1 one too).
 pkill -f "$RUN_PREFIX" || true
@@ -131,6 +149,7 @@ TIMETRACKER_E2E_TRACKER="$PWD/$BUILD_APP" \
 TIMETRACKER_E2E_APPS="$PWD/$E2E_APPS" \
 TIMETRACKER_E2E_RUN="$RUN" \
 TIMETRACKER_E2E_CHROME="$CHROME" \
+TIMETRACKER_E2E_FIREFOX="$FIREFOX" \
     swift test --filter TrackerE2ETests &
 TEST_PID=$!
 wait "$TEST_PID"
@@ -145,6 +164,10 @@ if [[ ! -f "$CHECKED" ]]; then
 fi
 if [[ -n "$CHROME" ]] && ! grep -qx "chrome=1" "$CHECKED"; then
     echo "error: Chrome's steps didn't run" >&2
+    exit 1
+fi
+if [[ -n "$FIREFOX" ]] && ! grep -qx "firefox=1" "$CHECKED"; then
+    echo "error: Firefox's steps didn't run" >&2
     exit 1
 fi
 echo "Checked: $(tr '\n' ' ' < "$CHECKED")"

@@ -25,9 +25,11 @@ final class PageReadingPolicy {
     static let evidenceMs: Int64 = 30 * 60 * 1000
     /// Each step between samples adds at most this much, so sleep, hangs and clock jumps add ~nothing.
     static let maxStepMs: Int64 = 10_000
-    /// Probe the same window again after this long. A window other than the one last probed
-    /// in that app is probed right away.
-    static let probeEveryMs: Int64 = 60_000
+    /// When to probe the same window again: 2 s after the first probe, then waits doubling up
+    /// to a minute. Early retries because a tree is often still empty on the first look (a
+    /// browser that has just started builds its page tree only once asked). A window other than
+    /// the one last probed in that app is probed right away, and starts the schedule again.
+    static let probeBackoff = Backoff(firstDelayMs: 2_000, maxDelayMs: 60_000)
 
     private struct LastSample {
         let app: AppIdentity
@@ -41,7 +43,7 @@ final class PageReadingPolicy {
     private struct LastProbe {
         let pid: pid_t
         let window: AnyHashable
-        let atMs: Int64
+        var retry: BackoffRetry
     }
 
     private let store: PageReadingStore
@@ -56,7 +58,7 @@ final class PageReadingPolicy {
     /// Apps probed at least once since probing started, so their active time counts as evidence.
     private var probedApps: Set<AppIdentity> = []
     private var lastSample: LastSample?
-    /// Per app, so switching back to an app doesn't probe its window again before `probeEveryMs`.
+    /// Per app, so switching back to an app doesn't probe its window again before it's due.
     /// Only apps being probed: dropped when decided.
     private var lastProbes: [AppIdentity: LastProbe] = [:]
 
@@ -105,18 +107,33 @@ final class PageReadingPolicy {
     }
 
     /// Whether to probe `window` now: it isn't the window last probed in `app` (or the app was
-    /// relaunched), or that was a while ago. `window`: any value that identifies the window.
+    /// relaunched), or its next probe is due (`probeBackoff`). `window`: any value that
+    /// identifies the window.
     func isProbeDue(app: AppIdentity, pid: pid_t, window: AnyHashable, atMs nowMs: Int64) -> Bool {
-        guard let last = lastProbes[app], last.pid == pid, last.window == window else {
+        guard let last = lastProbe(app, pid, window) else {
             return true
         }
-        let sinceMs = nowMs - last.atMs
-        return sinceMs >= Self.probeEveryMs || sinceMs < 0
+        return last.retry.isDue(atMs: nowMs)
+    }
+
+    /// When `window` is due for its next probe, so a sample can be taken then; nil if it isn't
+    /// the window last probed in `app` (it's due now) or `app` isn't being probed.
+    func nextProbeAtMs(app: AppIdentity, pid: pid_t, window: AnyHashable) -> Int64? {
+        lastProbe(app, pid, window)?.retry.nextAttemptAtMs
+    }
+
+    private func lastProbe(_ app: AppIdentity, _ pid: pid_t, _ window: AnyHashable) -> LastProbe? {
+        guard let last = lastProbes[app], last.pid == pid, last.window == window else {
+            return nil
+        }
+        return last
     }
 
     /// A probe of `app`'s focused window found content pages, or not.
     func noteProbe(app: AppIdentity, pid: pid_t, window: AnyHashable, hasContentPages: Bool, atMs nowMs: Int64) {
-        lastProbes[app] = LastProbe(pid: pid, window: window, atMs: nowMs)
+        var last = lastProbe(app, pid, window) ?? LastProbe(pid: pid, window: window, retry: BackoffRetry(Self.probeBackoff))
+        last.retry.noteAttempt(atMs: nowMs)
+        lastProbes[app] = last
         var stats = probes[app] ?? AppPageProbes()
         let isFirstProbe = stats.probeCount == 0
         if isFirstProbe {

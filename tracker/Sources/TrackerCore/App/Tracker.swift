@@ -46,6 +46,8 @@ final class Tracker {
     private var isAsleep = false
     private var isAxTrusted: Bool?
     private var scheduledTicks: Set<DelayedTick> = []
+    /// The sample for the frontmost app's next probe, and when it's due.
+    private var probeTick: (atMs: Int64, work: DispatchWorkItem)?
 
     /// `pollIntervalSeconds` other than the default is for the end-to-end test, so a missed
     /// event isn't covered up by the poll.
@@ -146,6 +148,7 @@ final class Tracker {
         let sample = sampler.sample(nowMs: now, isScreenLocked: isScreenLocked, isAxTrusted: isAxTrusted)
         windowObserver.observe(pid: sample.frontmostPid, watchFocusedElement: sample.isReadingPages, isAxTrusted: isAxTrusted)
         windowObserver.watchPage(sample.pageElement)
+        scheduleProbeTick(atMs: sample.nextProbeAtMs, nowMs: now)
         switch settler.decide(sample.snapshot, idleSinceMs: sample.idleSinceMs, atMs: now, recorded: recorder.openSnapshot) {
         case .record(let changedAtMs):
             do {
@@ -176,6 +179,26 @@ final class Tracker {
             self?.scheduledTicks.remove(kind)
             self?.tick()
         }
+    }
+
+    /// A sample when the frontmost app's window is due for its next probe, so a probe retried
+    /// after 2 s doesn't wait for the poll. Replaces the one scheduled before: only the frontmost
+    /// app is probed. nil: none.
+    private func scheduleProbeTick(atMs dueAtMs: Int64?, nowMs: Int64) {
+        guard dueAtMs != probeTick?.atMs else {
+            return
+        }
+        probeTick?.work.cancel()
+        probeTick = nil
+        guard let dueAtMs else {
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            self?.probeTick = nil
+            self?.tick()
+        }
+        probeTick = (dueAtMs, work)
+        queue.asyncAfter(deadline: .now() + .milliseconds(Int(max(dueAtMs - nowMs, 0))), execute: work)
     }
 
     /// Takes a final sample, so the time since the last poll isn't lost, then closes the open interval.

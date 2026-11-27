@@ -15,7 +15,7 @@ Related: what the columns mean, [data-model.md](data-model.md); when samples are
 **Page reading mode.** Searching a window costs the tracker a few milliseconds, and an Electron app (Claude, Slack, Notion…) builds its web tree only once the tracker switches it on, which costs that app CPU and memory for the rest of its run. So each app has a *page reading mode*: on, off, or probing.
 - **On:** the tracker reads the app's content page on every sample.
 - **Off:** it never reads the app's pages.
-- **Probing:** the tracker hasn't decided yet. It searches the app's window about once a minute, and records no page meanwhile. As soon as a search finds a content page, the app's page reading mode becomes on. If none is found in 30 min of use, it becomes off.
+- **Probing:** the tracker hasn't decided yet. It searches the app's window right away, again a few times in the first minute, then about once a minute, and records no page meanwhile. As soon as a search finds a content page, the app's page reading mode becomes on. If none is found in 30 min of use, it becomes off.
 
 Every app starts out probing. The user can override the outcome for any app. Details: [Page reading mode](#page-reading-mode).
 
@@ -68,7 +68,9 @@ On every sample, the tracker works out each app's page reading mode like this:
 
 A *probe* is one search of the focused window of an app that's probing.
 
-- **When:** a sample of a probing app makes a probe if its focused window isn't the one last probed in that app (or the app was relaunched), or if that probe was 60 s or more ago. Other samples of that app don't search at all, and record no page. The last probe is remembered per app, so switching back and forth between apps doesn't probe the same window again within the minute.
+- **When:** the first time a sample sees an app's focused window, then again with exponential backoff from 2 s up to 60 s, then every 60 s. Other samples of that app don't search, and record no page. Code: `PageReadingPolicy.probeBackoff`.
+- **Switching to another window, or relaunching the app, starts the schedule over.** Switching to another app and back doesn't.
+- **A probe that comes due gets a sample of its own,** if the app is still in front, so it doesn't wait for the next poll ([sampling.md](sampling.md#when-the-tracker-samples)).
 - **Electron apps get their web tree switched on before their first probe** (see [The Electron tree switch](#the-electron-tree-switch)), since they show no pages without it.
 - **A probe that finds a content page ends probing:** the probe result is yes, so the mode becomes on (unless the user chose off). That same sample already records the page.
 
@@ -103,7 +105,7 @@ Each is stored in a table owned by whoever decides it, so neither the tracker no
 
 ## Cost
 
-**Cost to the tracker:** each search visits a number of elements and makes a few Accessibility calls for each (role, children), plus URL and title per web area. Each call is a round trip to the app's process. An app whose page reading mode is on is searched on every sample; a probing app about once a minute. Measured with the dump tool ([diagnostics.md](diagnostics.md#the-dump-tool)):
+**Cost to the tracker:** each search visits a number of elements and makes a few Accessibility calls for each (role, children), plus URL and title per web area. Each call is a round trip to the app's process. An app whose page reading mode is on is searched on every sample; a probing app 5 times in a window's first 30 s, then about once a minute ([Probing](#probing)). Measured with the dump tool ([diagnostics.md](diagnostics.md#the-dump-tool)):
 
 | App | Elements visited | Time per search |
 |---|---|---|
@@ -127,7 +129,6 @@ A search in an app without pages stops at the search budget, 150 elements.
 - **No page rather than a guess** when several pages are left and none holds focus. A wrong URL would put time under the wrong project; a missing one only loses detail ([record-consistency.md](record-consistency.md)).
 - **Probing, not a fixed list of apps.** The list had to be kept by hand and missed apps nobody thought of. Probing finds pages in any app, including document-based apps whose trees we haven't seen.
 - **One content page is enough for a probe result of yes.** Deliberately generous: an app wrongly set off loses its pages for good, while an app wrongly set on costs only a cheap search per sample, and the user can choose off.
-- **Probing once per window and once a minute, without watching for changes.** Most apps never get a probe result (they're used less than 30 min per tracker run), so probing must cost little.
 - **Time when no probe could happen doesn't count towards the 30 min.** While the screen is locked, the user is idle, the app has no focused window, or the Mac sleeps, no probe runs, so that time says nothing about whether the app has pages.
 - **The user's choice and the probe result in separate tables.** Each side writes only its own table, and the probe result stays a fact the UI can show next to the user's choice ("auto: no pages found on …"). Neither table's columns are called "mode" or "enabled", which would hide who decided.
 - **Keyed by app identity, not by path or name.** An app's choice and probe result survive updates and moves. An unbundled program that moves counts as a new app and is probed again, which is the safe side.
@@ -144,9 +145,10 @@ A search in an app without pages stops at the search budget, 150 elements.
 - **Apps can notice the switch.** VS Code, with its tree switched on, asks "Screen reader usage detected. Do you want to enable editor.accessibilitySupport…?". The tracker doesn't need that setting.
 - **Browsers show the current tab's page without any switch:** one web area with its URL, about 5 levels below the window. Background tabs aren't in the tree. `AXManualAccessibility` isn't supported (error -25205) and isn't needed. Observed in Firefox Developer Edition, Safari and Chrome.
 - **A browser's tree is often on anyway.** With the tracker stopped, Firefox's `about:support` showed accessibility as off right after launch, and "Activated" a few seconds later: another app with Accessibility access (likely a window manager) had turned it on. Where that happens, reading browser pages costs the browser nothing extra.
-- **Browser trees are built lazily too:** the first read after a browser starts, or after nothing has read its tree for a while, can come back empty (seen once in Safari).
+- **Browser trees are built lazily too:** the first read after a browser starts, or after nothing has read its tree for a while, can come back empty (seen once in Safari). A newly started Firefox shows its window at once, but its page only about 140 ms after the first query (Firefox Developer Edition 162, `--watch-ax`, 2026-11-26).
 - **WebKit sends no notification for some page changes:** a page renaming itself, or changing its URL without a load (`history.pushState`, going back across one, a fragment change). Not to the page, its window or the app, though the page element's URL and title update at once. A load does notify (`AXLoadComplete`), with a new page element. Seen in WKWebView (the end-to-end test's app) with `--watch-ax` ([diagnostics.md](diagnostics.md#the-watch-tool)), 2026-11-26.
-- **Chrome announces most page changes through its window.** It names the window after the shown tab (`<page title> - Google Chrome`), so a page renaming itself renames the window, which sends `AXTitleChanged`. Loads send `AXLoadComplete`, and switching tabs or windows moves keyboard focus. A URL change without a load and without a new title (`history.pushState`, a fragment change) sends nothing, and the page element kept the old URL until the page's next change (seen for 2 s). `pushState` isn't allowed on `file://` pages in Chrome. Seen in Chrome 158 with `--watch-ax`, 2026-11-26; the [end-to-end test](end-to-end-tests.md) steps through the announced ones. Firefox not checked yet.
+- **Chrome announces most page changes through its window.** It names the window after the shown tab (`<page title> - Google Chrome`), so a page renaming itself renames the window, which sends `AXTitleChanged`. Loads send `AXLoadComplete`, and switching tabs or windows moves keyboard focus. A URL change without a load and without a new title (`history.pushState`, a fragment change) sends nothing, and the page element kept the old URL until the page's next change (seen for 2 s). `pushState` isn't allowed on `file://` pages in Chrome. Seen in Chrome 158 with `--watch-ax`, 2026-11-26; the [end-to-end test](end-to-end-tests.md) steps through the announced ones.
+- **Firefox announces the same through its window,** which it titles with the page's title alone (no app name). A page renaming itself, or a `pushState` with a new title, renames the window (`AXTitleChanged`); loads send `AXLoadComplete` with a new page element; switching tabs or windows moves keyboard focus. A URL change alone (`pushState`, a fragment change) sends only `AXValueChanged` from the address bar, which the tracker doesn't listen for, but unlike Chrome the page element has the new URL at once. A new empty tab titles the window with the app's name and has an `about:blank` page. Seen in Firefox Developer Edition 162 with `--watch-ax`, 2026-11-26; the end-to-end test steps through these.
 - **Electron answers Accessibility calls in its main process,** not in the page's renderer (inferred). This fits Claude's search taking as long while it streams a reply as when it's idle.
 
 ## Limitations
@@ -158,6 +160,6 @@ A search in an app without pages stops at the search budget, 150 elements.
 - **An app that shows a web page once** (a sign-in window, a "What's new" panel) gets the probe result yes for good. A probe result of no also lasts until a re-probe, even if an update adds web views.
 - **Probing an Electron app switches its tree on for the rest of its run,** even if the probe result turns out no. VS Code then shows its screen reader prompt; choosing off for VS Code before its first probe avoids it.
 - **Probing reads pages in apps that used to have only window titles recorded** (password managers, banking apps, Mail). URLs are scrubbed, but there are no exclusions yet.
-- **The first search after a tree is switched on can find nothing,** since the tree is built lazily. For a probe, that only means waiting for the next one; with the mode on, it's a short interval without a page.
+- **The first search after a tree is switched on can find nothing,** since the tree is built lazily. For a probe, that only means waiting for the next one, 2 s later after a window's first ([Probing](#probing)); with the mode on, it's a short interval without a page.
 - **A re-probe requested in the future** (the clock went back after the request) keeps the app probing until the clock passes it, since every probe result is older than the request.
 - **Scripts share their interpreter's choice and probe result.** An unbundled program is identified by its executable, which for a script is the interpreter (`/usr/bin/python3`), so all scripts it runs are one app here.

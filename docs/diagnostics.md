@@ -32,7 +32,7 @@ Errors (no running app with that bundle ID, no focused window) are written to th
 
 - **Each notification is registered three times:** on the app element, on the focused window, and on the focused window's web area (moved along when either changes). Each line says which one it came through, since an app needn't deliver a notification to every registration. Notifications the app element refuses are logged at the start.
 - **The focused page is polled every 100 ms,** and a line is written when its URL or title changes, or it's a new element. That shows a change the app sent no notification for, and when a navigation replaces the page element (notifications registered on the old one stop).
-- **A pid instead of the bundle ID** picks one copy of an app that runs more than once, such as a second Chrome with its own profile (`--user-data-dir`), beside the user's.
+- **A pid instead of the bundle ID** picks one copy of an app that runs more than once, such as a second Chrome or Firefox with its own profile (`--user-data-dir`, `-profile`), beside the user's.
 - Lines are in ms since the start; the first line gives the start in Unix ms, to line up with another log. Titles and URLs are written as they are, unscrubbed: the file is for a look on this machine.
 
 Found with it: WebKit sends nothing for a page title change or a URL change without a load; Chrome sends nothing for a URL change without a load or a new title ([page-reading.md](page-reading.md#background)).

@@ -11,6 +11,9 @@ struct Sample {
     let isReadingPages: Bool
     /// The page element `snapshot.pageUrl` was read from, to watch for changes.
     let pageElement: AXUIElement?
+    /// While the frontmost app's window is being probed: when its next probe is due, so a sample
+    /// can be taken then (`PageReadingPolicy.probeBackoff`).
+    let nextProbeAtMs: Int64?
 }
 
 /// Reads what's on screen right now from macOS: the frontmost app, its focused window and page
@@ -39,13 +42,15 @@ final class Sampler {
                 idleSinceMs: nil,
                 frontmostPid: nil,
                 isReadingPages: false,
-                pageElement: nil
+                pageElement: nil,
+                nextProbeAtMs: nil
             )
         }
         pageReading.refresh()
         var snapshot = Snapshot()
         var page: WebPage<AXUIElement>?
         var hasProbeableWindow = false
+        var nextProbeAtMs: Int64?
         let frontmost = NSWorkspace.shared.frontmostApplication
         if let app = frontmost {
             snapshot.bundleId = app.bundleIdentifier
@@ -63,6 +68,9 @@ final class Sampler {
                 page = readPage(mode: mode, app: identity, appElement: appElement, pid: pid, window: window, bundlePath: snapshot.bundlePath, atMs: nowMs)
                 snapshot.pageUrl = page?.url
                 snapshot.pageTitle = page?.title
+                if mode == .probing {
+                    nextProbeAtMs = pageReading.nextProbeAtMs(app: identity, pid: pid, window: window)
+                }
             }
         }
         let idleSeconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: Self.anyInputEventType)
@@ -79,7 +87,8 @@ final class Sampler {
             frontmostPid: frontmost?.processIdentifier,
             // A probe that found a page has just switched page reading on.
             isReadingPages: mode == .on || page != nil,
-            pageElement: page?.element
+            pageElement: page?.element,
+            nextProbeAtMs: nextProbeAtMs
         )
     }
 

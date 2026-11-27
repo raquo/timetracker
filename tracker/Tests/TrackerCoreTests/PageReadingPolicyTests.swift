@@ -16,7 +16,7 @@ struct PageReadingPolicyTests {
     @Test func constants() {
         #expect(PageReadingPolicy.evidenceMs == 30 * 60 * 1000)
         #expect(PageReadingPolicy.maxStepMs == 10_000)
-        #expect(PageReadingPolicy.probeEveryMs == 60_000)
+        #expect(PageReadingPolicy.probeBackoff == Backoff(firstDelayMs: 2_000, maxDelayMs: 60_000))
     }
 
     @Test func newAppIsProbingWithNoRow() throws {
@@ -62,11 +62,23 @@ struct PageReadingPolicyTests {
 
     // MARK: When to probe
 
-    @Test func sameWindowIsProbedAgainAfter60s() {
+    @Test func sameWindowIsProbedAgainWithBackoff() {
+        // 2 s after the first probe, then 4, 8, 16, 32, 60, 60 s after each.
+        var at: Int64 = 0
+        for delay: Int64 in [2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000] {
+            h.probe(notion, at: at, window: "w1", pid: 100)
+            #expect(h.policy.nextProbeAtMs(app: notion, pid: 100, window: "w1") == t0 + at + delay)
+            #expect(!h.policy.isProbeDue(app: notion, pid: 100, window: "w1", atMs: t0 + at))
+            #expect(!h.policy.isProbeDue(app: notion, pid: 100, window: "w1", atMs: t0 + at + delay - 1))
+            #expect(h.policy.isProbeDue(app: notion, pid: 100, window: "w1", atMs: t0 + at + delay))
+            at += delay
+        }
+    }
+
+    @Test func otherWindowsAppsAndClockJumpsAreProbedRightAway() {
         h.probe(notion, at: 0, window: "w1", pid: 100)
-        #expect(!h.policy.isProbeDue(app: notion, pid: 100, window: "w1", atMs: t0))
-        #expect(!h.policy.isProbeDue(app: notion, pid: 100, window: "w1", atMs: t0 + 59_999))
-        #expect(h.policy.isProbeDue(app: notion, pid: 100, window: "w1", atMs: t0 + 60_000))
+        // Not the last probed window: due now, with no time to wait for.
+        #expect(h.policy.nextProbeAtMs(app: notion, pid: 100, window: "w2") == nil)
         // Another window, a relaunched app (new pid), or a clock jump back: right away.
         #expect(h.policy.isProbeDue(app: notion, pid: 100, window: "w2", atMs: t0 + 1))
         #expect(h.policy.isProbeDue(app: notion, pid: 101, window: "w1", atMs: t0 + 1))
@@ -77,15 +89,17 @@ struct PageReadingPolicyTests {
 
     @Test func switchingBackToAnAppDoesntProbeItsWindowEarly() {
         h.probe(notion, at: 0, window: "n1")
-        h.probe(vscode, at: 10_000, window: "v1")
-        #expect(!h.policy.isProbeDue(app: notion, pid: 100, window: "n1", atMs: t0 + 20_000))
+        h.probe(vscode, at: 500, window: "v1")
+        #expect(!h.policy.isProbeDue(app: notion, pid: 100, window: "n1", atMs: t0 + 1_000))
     }
 
     @Test func onlyTheLastProbedWindowIsRemembered() {
         h.probe(notion, at: 0, window: "w1")
-        h.probe(notion, at: 10_000, window: "w2")
-        #expect(h.policy.isProbeDue(app: notion, pid: 100, window: "w1", atMs: t0 + 20_000))
-        #expect(!h.policy.isProbeDue(app: notion, pid: 100, window: "w2", atMs: t0 + 20_000))
+        h.probe(notion, at: 500, window: "w2")
+        #expect(h.policy.isProbeDue(app: notion, pid: 100, window: "w1", atMs: t0 + 1_000))
+        #expect(!h.policy.isProbeDue(app: notion, pid: 100, window: "w2", atMs: t0 + 1_000))
+        // The new window's schedule starts again: 2 s after its own first probe.
+        #expect(h.policy.nextProbeAtMs(app: notion, pid: 100, window: "w2") == t0 + 2_500)
     }
 
     // MARK: Probing to off
@@ -97,10 +111,12 @@ struct PageReadingPolicyTests {
             at += 5_000
         }
         #expect(h.policy.mode(for: vscode) == .probing)
-        // The tick at exactly 30 min probes once more (due every 60 s), then decides.
+        // The tick at exactly 30 min decides. Probes on the first 5 s tick that each is due:
+        // 0, 5, 10, 20, 40 and 75 s (waits of 2, 4, 8, 16, 32 s), then every 60 s up to
+        // 29 min 15 s: 34 in all.
         #expect(h.tick(vscode, at: Self.evidenceMs) == .probing)
         #expect(h.policy.mode(for: vscode) == .off)
-        #expect(try h.probeRows() == [ProbeRow(app: vscode, hasContentPages: false, decidedAt: Self.evidenceMs, count: 31, firstAt: 0, lastAt: Self.evidenceMs)])
+        #expect(try h.probeRows() == [ProbeRow(app: vscode, hasContentPages: false, decidedAt: Self.evidenceMs, count: 34, firstAt: 0, lastAt: 1_755_000)])
         #expect(h.tick(vscode, at: Self.evidenceMs + 60_000) == .off)
         try h.restart()
         #expect(h.policy.mode(for: vscode) == .off)
@@ -274,8 +290,9 @@ struct PageReadingPolicyTests {
         let start = Self.evidenceMs + 5_000
         #expect(tickUntilDecided(vscode, from: start) == start + Self.evidenceMs)
         #expect(h.policy.mode(for: vscode) == .off)
-        // 31 probes before, 31 after (every 60 s, both ends included).
-        #expect(try h.probeRows() == [ProbeRow(app: vscode, hasContentPages: false, decidedAt: start + Self.evidenceMs, count: 62, firstAt: 0, lastAt: start + Self.evidenceMs)])
+        // 34 probes before, 34 after: the schedule starts again (as in
+        // `thirtyMinutesOfActiveUseWithoutAPageTurnsOff`).
+        #expect(try h.probeRows() == [ProbeRow(app: vscode, hasContentPages: false, decidedAt: start + Self.evidenceMs, count: 68, firstAt: 0, lastAt: start + 1_755_000)])
     }
 
     @Test func reprobeFromOffCanTurnOn() throws {
@@ -284,7 +301,7 @@ struct PageReadingPolicyTests {
         #expect(h.tick(vscode, at: Self.evidenceMs + 5_000) == .probing)
         #expect(h.tick(vscode, at: Self.evidenceMs + 10_000, window: "w2", hasContentPages: true) == .probing)
         #expect(h.policy.mode(for: vscode) == .on)
-        #expect(try h.probeRows() == [ProbeRow(app: vscode, hasContentPages: true, decidedAt: Self.evidenceMs + 10_000, count: 33, firstAt: 0, lastAt: Self.evidenceMs + 10_000)])
+        #expect(try h.probeRows() == [ProbeRow(app: vscode, hasContentPages: true, decidedAt: Self.evidenceMs + 10_000, count: 36, firstAt: 0, lastAt: Self.evidenceMs + 10_000)])
     }
 
     @Test func reprobeIgnoredWhileOnOrOff() throws {
