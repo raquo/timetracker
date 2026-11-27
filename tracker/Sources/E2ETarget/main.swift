@@ -7,11 +7,14 @@ import WebKit
 /// `E2ETarget --control <dir>`: runs the commands the test writes to `<dir>/cmd-<n>.json`
 /// (n = 1, 2, …, in order, one at a time) and answers each in `<dir>/ack-<n>.json` once done:
 /// `{"result": …}` (the script's result for `eval`, else null) or `{"error": "…"}`.
+/// Exits once `<dir>` is gone, so a run that died without cleaning up doesn't leave it running.
 /// Commands (`op`, plus its fields):
-/// - `openWindow`: `id`, `title`, `pages` (URLs; none: a plain window, 2+: side by side),
-///   `isFocusCleared` (no keyboard focus in it, else AppKit focuses the first web view); brings
-///   it to the front and waits for the pages to load.
+/// - `openWindow`: `id` (new), `title`, `pages` (URLs; none: a plain window, 2+: side by side),
+///   `isFocusCleared` (no keyboard focus in it, else AppKit focuses the first web view),
+///   `isPanel` (a utility panel instead of a standard window); brings it to the front and waits
+///   for the pages to load.
 /// - `focusWindow`: `id`.
+/// - `closeWindow`: `id`.
 /// - `setTitle`: `id`, `title`.
 /// - `navigate`: `id`, `index`, `url`; waits for the load.
 /// - `focusPage`: `id`, `index`: keyboard focus to that web view.
@@ -45,6 +48,9 @@ final class Target: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     private func poll() {
+        guard FileManager.default.fileExists(atPath: controlDir.path) else {
+            exit(0)
+        }
         guard !isBusy else {
             return
         }
@@ -80,13 +86,18 @@ final class Target: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         switch op {
         case "openWindow":
             let id = try field(c, "id", String.self)
+            guard windows[id] == nil else {
+                throw TargetError("window \(id) is already open")
+            }
             let pages = try (c["pages"] as? [String] ?? []).map(url)
-            let window = NSWindow(
-                contentRect: NSRect(x: 200 + windows.count * 40, y: 200, width: 900, height: 600),
-                styleMask: [.titled, .closable, .resizable, .miniaturizable],
-                backing: .buffered,
-                defer: false
-            )
+            let frame = NSRect(x: 200 + windows.count * 40, y: 200, width: 900, height: 600)
+            let window: NSWindow
+            if c["isPanel"] as? Bool == true {
+                window = NSPanel(contentRect: frame, styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+            }
+            else {
+                window = NSWindow(contentRect: frame, styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+            }
             window.isReleasedWhenClosed = false
             window.title = try field(c, "title", String.self)
             var webViews: [WKWebView] = []
@@ -116,6 +127,11 @@ final class Target: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             afterLoads { done(nil, $0) }
         case "focusWindow":
             try window(c).window.makeKeyAndOrderFront(nil)
+            done(nil, nil)
+        case "closeWindow":
+            let id = try field(c, "id", String.self)
+            try window(c).window.close()
+            windows[id] = nil
             done(nil, nil)
         case "setTitle":
             try window(c).window.title = try field(c, "title", String.self)

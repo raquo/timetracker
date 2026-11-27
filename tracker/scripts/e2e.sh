@@ -1,14 +1,16 @@
 #!/bin/bash
 # End-to-end test: the real tracker (build/TimeTracker.app, which holds the Accessibility
-# permission) records into a temporary database while the test drives two copies of the
+# permission) records into a temporary database while the test drives three copies of the
 # E2ETarget app, then a throwaway Google Chrome; then the rows are checked. See
 # Tests/TrackerE2ETests.
 #
-# Takes over the screen for about 80 s: don't click or type meanwhile (moving the mouse is fine).
+# Takes over the screen for about 90 s: don't click or type meanwhile (moving the mouse is fine).
 # Your own tracker and Chrome keep running; your tracker records the run too.
 #
-# KEEP=1 keeps the run folder (database, pages, Chrome's profile) for a look afterwards.
-# CHROME=<path to the app> drives another Chrome; CHROME= (empty) skips Chrome's steps.
+# KEEP=1 keeps the run folder (database, pages, Chrome's profile) for a look afterwards, until
+# the next run.
+# TIMETRACKER_E2E_CHROME=<path to the app> drives another Chrome; set but empty, it skips
+# Chrome's steps.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/config.sh
@@ -19,32 +21,55 @@ LOCK="$TMP/timetracker-e2e.lock"
 RUN_PREFIX="$TMP/timetracker-e2e-run."
 E2E_APPS="build/e2e"
 TRACKER_BIN="$PWD/$BUILD_APP/Contents/MacOS/TimeTracker"
-CHROME="${CHROME-/Applications/Google Chrome.app}"
+CHROME="${TIMETRACKER_E2E_CHROME-/Applications/Google Chrome.app}"
 if [[ -n "$CHROME" && ! -d "$CHROME" ]]; then
-    echo "error: no Chrome at $CHROME (CHROME= skips Chrome's steps)" >&2
+    echo "error: no Chrome at $CHROME (TIMETRACKER_E2E_CHROME= skips Chrome's steps)" >&2
     exit 1
 fi
 
 # The lock holds the pid of the run that took it, so a lock left by a killed run is taken over.
+# A lock with no pid yet is a run that's just starting. A pid that's alive but not an e2e.sh
+# was reused by another process after the run died.
 if ! mkdir "$LOCK" 2>/dev/null; then
+    sleep 1
     holder="$(cat "$LOCK/pid" 2>/dev/null || true)"
-    if [[ -n "$holder" ]] && kill -0 "$holder" 2>/dev/null; then
+    if [[ -z "$holder" ]]; then
+        echo "error: another e2e run is starting (or one left $LOCK without a pid: remove it)" >&2
+        exit 1
+    fi
+    if kill -0 "$holder" 2>/dev/null && ps -o command= -p "$holder" | grep -q "e2e\.sh"; then
         echo "error: another e2e run (pid $holder) is running" >&2
         exit 1
     fi
-    echo "Taking over the lock of a run that died (pid ${holder:-unknown})"
+    echo "Taking over the lock of a run that died (pid $holder)"
+    rm -rf "$LOCK"
+    mkdir "$LOCK"
 fi
 echo $$ > "$LOCK/pid"
 
 # Leftovers of a run that died without cleaning up: its target apps and Chrome (their arguments
-# name the run folder), a tracker running from the build copy (also stops a `--dump-ax` run from
-# it), and run folders.
+# name the run folder), a tracker running from the build copy (also stops a `--dump-ax` or
+# `--watch-ax` run from it), and run folders (a KEEP=1 one too).
 pkill -f "$RUN_PREFIX" || true
 pkill -f "$TRACKER_BIN" || true
 rm -rf "$RUN_PREFIX"*
 
+# A process and everything it started.
+kill_tree() {
+    local child
+    for child in $(pgrep -P "$1"); do
+        kill_tree "$child"
+    done
+    kill "$1" 2>/dev/null || true
+}
+
 RUN=""
+TEST_PID=""
+WATCHDOG_PID=""
 cleanup() {
+    if [[ -n "$TEST_PID" ]]; then
+        kill_tree "$TEST_PID"
+    fi
     if [[ -n "$RUN" ]]; then
         pkill -f "$RUN" || true
         if [[ "${KEEP:-}" == "1" ]]; then
@@ -55,21 +80,28 @@ cleanup() {
     fi
     pkill -f "$TRACKER_BIN" || true
     rm -rf "$LOCK"
+    if [[ -n "$WATCHDOG_PID" ]]; then
+        kill "$WATCHDOG_PID" 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
 
 scripts/build.sh
 
 swift build --product E2ETarget
 TARGET_BIN="$(swift build --show-bin-path)/E2ETarget"
 mkdir -p "$E2E_APPS"
-for letter in A B; do
+for letter in A B C; do
     app="$E2E_APPS/E2E Target $letter.app"
     id="com.raquo.timetracker.e2e-target-$(echo "$letter" | tr A-Z a-z)"
     rm -rf "$app"
-    mkdir -p "$app/Contents/MacOS"
+    mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
     cp "$TARGET_BIN" "$app/Contents/MacOS/E2ETarget"
     sed -e "s/__BUNDLE_ID__/$id/" -e "s/__NAME__/E2E Target $letter/" Resources/E2ETarget-Info.plist > "$app/Contents/Info.plist"
+    # A page loaded from inside the app: its own UI, not content (docs/page-reading.md).
+    echo "<!doctype html><title>Own UI</title><body><h1>Own UI</h1></body>" > "$app/Contents/Resources/own.html"
     codesign --force --sign - "$app"
 done
 
@@ -77,8 +109,42 @@ done
 # apps as given, and pkill matches their arguments as text.
 RUN="$(mktemp -d "${RUN_PREFIX}XXXXXX")"
 
+# If this script is killed outright (SIGKILL: no trap runs), this cleans up after it instead.
+# Detached and immune to the terminal closing; `cleanup` stops it on any other exit. Given its
+# values in the environment, not as arguments, so its own `pkill -f` doesn't match it.
+E2E_PID=$$ E2E_RUN="$RUN" E2E_TRACKER_BIN="$TRACKER_BIN" E2E_LOCK="$LOCK" nohup bash -c '
+    while kill -0 "$E2E_PID" 2>/dev/null; do
+        sleep 1
+    done
+    pkill -f "$E2E_RUN" || true
+    pkill -f "$E2E_TRACKER_BIN" || true
+    rm -rf "$E2E_RUN"
+    if [[ "$(cat "$E2E_LOCK/pid" 2>/dev/null)" == "$E2E_PID" ]]; then
+        rm -rf "$E2E_LOCK"
+    fi
+' >/dev/null 2>&1 &
+WATCHDOG_PID=$!
+
+# In the background, so a signal to this script is handled at once (bash runs traps only
+# between commands, so not during a foreground `swift test`).
 TIMETRACKER_E2E_TRACKER="$PWD/$BUILD_APP" \
 TIMETRACKER_E2E_APPS="$PWD/$E2E_APPS" \
 TIMETRACKER_E2E_RUN="$RUN" \
 TIMETRACKER_E2E_CHROME="$CHROME" \
-    swift test --filter TrackerE2ETests
+    swift test --filter TrackerE2ETests &
+TEST_PID=$!
+wait "$TEST_PID"
+TEST_PID=""
+
+# `swift test` also passes when the test was skipped (an environment variable that didn't reach
+# it, a filter that matched nothing), so the test leaves a note once it has checked a whole run.
+CHECKED="$RUN/checked"
+if [[ ! -f "$CHECKED" ]]; then
+    echo "error: the test didn't check a run (skipped?): no $CHECKED" >&2
+    exit 1
+fi
+if [[ -n "$CHROME" ]] && ! grep -qx "chrome=1" "$CHECKED"; then
+    echo "error: Chrome's steps didn't run" >&2
+    exit 1
+fi
+echo "Checked: $(tr '\n' ' ' < "$CHECKED")"

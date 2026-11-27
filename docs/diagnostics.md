@@ -60,7 +60,7 @@ A fixture holds only these:
 `AxReplayTests` rebuilds each fixture from fake elements (`FakeNode`) and checks two things:
 
 1. **The replay finds what the live search found:** the same elements visited, pages and choice. This shows the fakes behave like the real elements, so the second check means something.
-2. **The tracker records the expected snapshot:** the window's attributes, document path and chosen page, as `Sampler` would read them. The expected snapshot for each fixture is written by hand in `AxReplayTests.expected`; a new fixture without one fails until it's added.
+2. **The tracker records the expected snapshot:** the window's attributes, document path and chosen page, read by `Sampler`'s own code (`readFocusedWindow`, `findPage`). The expected snapshot for each fixture is written by hand in `AxReplayTests.expected`; a new fixture without one fails until it's added, and so does an expectation whose fixture is gone, or no fixtures at all (a moved folder would otherwise leave nothing to check).
 
 Known gaps are pinned the same way: `claude-cmd-click-window` expects only the window title, so a fix shows up as a test to update.
 

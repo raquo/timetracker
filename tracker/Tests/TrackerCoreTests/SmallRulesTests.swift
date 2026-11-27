@@ -201,6 +201,17 @@ struct CommandLineTests {
         #expect(command("--dump-ax", "com.google.Chrome", "/tmp/a.json", "--json", "extra") == .usageError)
     }
 
+    @Test func pollInterval() throws {
+        #expect(try TrackerMain.pollInterval(environment: [:]) == Tracker.defaultPollIntervalSeconds)
+        #expect(try TrackerMain.pollInterval(environment: ["TIMETRACKER_POLL_SECONDS": ""]) == Tracker.defaultPollIntervalSeconds)
+        #expect(try TrackerMain.pollInterval(environment: ["TIMETRACKER_POLL_SECONDS": "3600"]) == 3600)
+        for bad in ["0", "-5", "1.5", "soon"] {
+            #expect(throws: TrackerMainError.self) {
+                try TrackerMain.pollInterval(environment: ["TIMETRACKER_POLL_SECONDS": bad])
+            }
+        }
+    }
+
     @Test func watchAx() {
         #expect(command("--watch-ax", "com.google.Chrome", "/tmp/a.txt", "30") == .watchAx(app: "com.google.Chrome", outputPath: "/tmp/a.txt", seconds: 30))
         #expect(command("--watch-ax", "com.google.Chrome", "/tmp/a.txt") == .usageError)

@@ -101,12 +101,19 @@ final class Sampler {
             return nil
         case .on, .probing:
             electronTree.enableIfElectron(app: appElement, pid: pid, bundlePath: bundlePath)
-            let pages = PageSearch.contentPages(in: window, bundlePath: bundlePath)
+            let found = Self.findPage(in: window, app: appElement, bundlePath: bundlePath)
             if mode == .probing {
-                pageReading.noteProbe(app: app, pid: pid, window: window, hasContentPages: !pages.isEmpty, atMs: nowMs)
+                pageReading.noteProbe(app: app, pid: pid, window: window, hasContentPages: found.hasContentPages, atMs: nowMs)
             }
-            return PageSearch.choose(from: pages, app: appElement)
+            return found.page
         }
+    }
+
+    /// Whether the window shows content pages, and the one to record. Also run on recorded trees
+    /// (`AxReplayTests`).
+    static func findPage<Node: AccessibilityNode>(in window: Node, app: Node, bundlePath: String?) -> (hasContentPages: Bool, page: WebPage<Node>?) where Node.Element == Node {
+        let pages = PageSearch.contentPages(in: window, bundlePath: bundlePath)
+        return (!pages.isEmpty, PageSearch.choose(from: pages, app: app))
     }
 
     /// Fills in the focused window's attributes. Returns the window, nil if there is none.

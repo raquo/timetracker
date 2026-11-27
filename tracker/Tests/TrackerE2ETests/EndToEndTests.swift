@@ -4,15 +4,16 @@ import Testing
 @testable import TrackerCore
 
 /// The real tracker (the build copy, which holds the Accessibility permission) recording into a
-/// temporary database while the test drives two copies of `E2ETarget`, then a throwaway Google
-/// Chrome; then the rows are checked against what each step showed. Takes over the screen for
-/// about 80 s.
+/// temporary database, with its poll turned off, while the test drives three copies of
+/// `E2ETarget`, then a throwaway Google Chrome; then the rows are checked against what each step
+/// showed. Takes over the screen for about 90 s.
 ///
 /// Run by scripts/e2e.sh, which builds the apps, makes the run folder, and cleans up after a
 /// crash. Skipped otherwise. Environment:
 /// - `TIMETRACKER_E2E_TRACKER`: the tracker app to run;
-/// - `TIMETRACKER_E2E_APPS`: folder holding the two target apps;
-/// - `TIMETRACKER_E2E_RUN`: an empty folder for this run (database, pages, command files);
+/// - `TIMETRACKER_E2E_APPS`: folder holding the three target apps;
+/// - `TIMETRACKER_E2E_RUN`: an empty folder for this run (database, pages, command files), where
+///   the test leaves `checked` once it has checked the run;
 /// - `TIMETRACKER_E2E_CHROME`: the Chrome app to drive. Empty or not set: Chrome's steps are skipped.
 @Suite(.serialized, .enabled(if: E2E.isEnabled, "run by scripts/e2e.sh"))
 struct EndToEndTests {
@@ -24,10 +25,14 @@ struct EndToEndTests {
         try run.check()
     }
 
+    /// Steps that change nothing ask the tracker for a sample (`sampleNow`) before they count:
+    /// otherwise they'd pass without the tracker having looked. Proven to work by "page renames
+    /// itself", which nothing else would record (the poll is turned off).
     private static func steps(_ run: E2E.Run) async throws {
         let r = run.id
         let a = run.a
         let b = run.b
+        let c = run.c
         let pages = run.pages
 
         try await run.step("plain window", expect: .init(app: a, window: "Plain \(r)")) {
@@ -39,13 +44,18 @@ struct EndToEndTests {
         try await run.step("navigate", expect: .init(app: a, window: "Web \(r)", url: pages.two, page: "Two \(r)")) {
             try await a.send("navigate", ["id": "web", "url": pages.two])
         }
-        // The fragment isn't recorded (docs/url-scrubbing.md), so nothing changes. Not tested: the
-        // page renaming itself or changing its URL without a load (`history.pushState`). WebKit
-        // sends no event for those, so they're recorded at the next 5 s poll, which a 2.5 s step
-        // can't wait for (docs/page-reading.md#limitations).
-        try await run.step("hash change", expect: .init(app: a, window: "Web \(r)", url: pages.two, page: "Two \(r)")) {
+        // WebKit sends no event for this (docs/page-reading.md#limitations), so only the sample
+        // asked for records it.
+        try await run.step("page renames itself", expect: .init(app: a, window: "Web \(r)", url: pages.two, page: "Two retitled \(r)")) {
+            try await a.send("eval", ["id": "web", "js": "document.title = \(E2E.jsString("Two retitled \(r)"))"])
+            try await a.waitUntil(window: "web", "document.title === \(E2E.jsString("Two retitled \(r)"))", "the title didn't change")
+            run.sampleNow()
+        }
+        // The fragment isn't recorded (docs/url-scrubbing.md), so nothing changes.
+        try await run.step("hash change", expect: .init(app: a, window: "Web \(r)", url: pages.two, page: "Two retitled \(r)")) {
             try await a.send("eval", ["id": "web", "js": "location.hash = 'part'"])
             try await a.waitUntil(window: "web", "location.hash === '#part'", "the hash didn't change")
+            run.sampleNow()
         }
         try await run.step(
             "secret in URL",
@@ -93,9 +103,35 @@ struct EndToEndTests {
                 "document.querySelector('iframe').contentDocument.activeElement?.id === 'i' && document.hasFocus()",
                 "focus didn't reach the iframe's text field"
             )
+            run.sampleNow()
+        }
+        // A page titled "Loading" that renames itself 450 ms after loading, between the tracker's
+        // first look (300 ms after the load event) and its second (400 ms later). Settling must
+        // hide the "Loading" state: the row is the final page, starting when the change was first
+        // seen, so before the rename (`Settler`).
+        try await run.step("page settles after loading", expect: .init(app: a, window: "Frame \(r)", url: pages.settle, page: "Loaded \(r)")) {
+            try await a.send("navigate", ["id": "frame", "url": pages.settle])
+            try await a.waitUntil(window: "frame", "document.title === \(E2E.jsString("Loaded \(r)"))", "the page didn't rename itself")
+            guard let renamedAtMs = try await a.send("eval", ["id": "frame", "js": "window.renamedAtMs"]) as? NSNumber else {
+                throw E2EError("the page didn't say when it renamed itself")
+            }
+            run.expectRowStart(before: renamedAtMs.int64Value)
         }
         try await run.step("plain window again", expect: .init(app: a, window: "Plain \(r)")) {
             try await a.send("focusWindow", ["id": "plain"])
+        }
+        // An app whose only page is its own UI, loaded from its bundle: not content, so no page
+        // is recorded, and page reading stays undecided (checked in `Run.check`).
+        try await run.step("own UI only", expect: .init(app: c, window: "Own \(r)")) {
+            try await c.send("openWindow", ["id": "own", "title": "Own \(r)", "pages": [c.ownPage]])
+            try await run.activate(c)
+        }
+        try await run.step("panel", expect: .init(app: c, window: "Panel \(r)", subrole: "AXFloatingWindow", isMainWindow: false)) {
+            try await c.send("openWindow", ["id": "panel", "title": "Panel \(r)", "isPanel": true])
+        }
+        try await run.step("no window", expect: .noWindow(app: c)) {
+            try await c.send("closeWindow", ["id": "panel"])
+            try await c.send("closeWindow", ["id": "own"])
         }
         try await chromeSteps(run)
     }
@@ -137,6 +173,7 @@ struct EndToEndTests {
         try await run.step("Chrome: hash change", expect: shows("Pushed \(r)", web.pushedScrubbed)) {
             try await chrome.eval(first, "location.hash = 'part'")
             try await chrome.waitUntil(first, "location.hash === '#part'", "the hash didn't change")
+            run.sampleNow()
         }
         try await run.step("Chrome: secret in URL", expect: shows("Secret \(r)", web.secretScrubbed)) {
             try await chrome.navigate(first, web.secret)
@@ -176,47 +213,74 @@ struct EndToEndTests {
 
 enum E2E {
     static let environment = ProcessInfo.processInfo.environment
-    static let isEnabled = environment["TIMETRACKER_E2E_TRACKER"] != nil && environment["TIMETRACKER_E2E_APPS"] != nil && environment["TIMETRACKER_E2E_RUN"] != nil
+    /// Set and not empty. Further checks in `Run.init`, which fail the test instead of
+    /// skipping it; scripts/e2e.sh fails a run that was skipped.
+    static let isEnabled = ["TIMETRACKER_E2E_TRACKER", "TIMETRACKER_E2E_APPS", "TIMETRACKER_E2E_RUN"].allSatisfy { !(environment[$0] ?? "").isEmpty }
 
     /// Each step is held this long before the next one.
     static let holdMs: Int64 = 2500
     /// A change may be recorded this long after the step that made it is done: an event, plus
     /// settling, plus slack.
     static let latencyMs: Int64 = 1500
+    /// The tracker's poll, turned off in effect: a change that's recorded only by the poll
+    /// would otherwise pass about 1 time in 4 (when the poll lands in the 1.5 s after a step).
+    static let trackerPollSeconds = 3600
 
-    static let targetIds = ["com.raquo.timetracker.e2e-target-a", "com.raquo.timetracker.e2e-target-b"]
+    static let targetIds = ["com.raquo.timetracker.e2e-target-a", "com.raquo.timetracker.e2e-target-b", "com.raquo.timetracker.e2e-target-c"]
 
-    /// An app as the tracker records it (`tracker_app`): bundle ID and install path.
+    /// An app as the tracker records it (`tracker_app`): bundle ID, install path, name.
     struct App: Equatable {
         let bundleId: String
         let path: String
+        let name: String
     }
 
-    /// What a step should be recorded as. Everything else is checked too: a standard main
-    /// window, not full screen, not locked. Except input idle, which depends on when someone
-    /// last touched the mouse or keyboard (see `Run.check`).
+    /// What a step should be recorded as: every column but input idle, which depends on when
+    /// someone last touched the mouse or keyboard (see `Run.check`). Rows must also not be
+    /// screen-locked.
     struct Expected: Equatable, CustomStringConvertible {
         var app: App
-        var window: String
+        var window: String?
         var url: String?
         var page: String?
         /// The window's document (`AXDocument`): none in the test app's windows.
         var document: String?
+        var role: String?
+        var subrole: String?
+        var isMainWindow: Int64?
+        var isFullScreen: Int64?
 
-        init(app: Target, window: String, url: String? = nil, page: String? = nil) {
-            self.init(app: app.app, window: window, url: url, page: page, document: nil)
+        /// A window of the test app: by default a standard main window.
+        init(app: Target, window: String, url: String? = nil, page: String? = nil, subrole: String = "AXStandardWindow", isMainWindow: Bool = true) {
+            self.init(app: app.app, window: window, url: url, page: page, document: nil, subrole: subrole, isMainWindow: isMainWindow)
         }
 
-        init(app: App, window: String, url: String?, page: String?, document: String?) {
+        /// A window that's not full screen.
+        init(app: App, window: String, url: String?, page: String?, document: String?, subrole: String = "AXStandardWindow", isMainWindow: Bool = true) {
             self.app = app
             self.window = window
             self.url = url
             self.page = page
             self.document = document
+            role = "AXWindow"
+            self.subrole = subrole
+            self.isMainWindow = isMainWindow ? 1 : 0
+            isFullScreen = 0
+        }
+
+        /// Nothing but the app.
+        fileprivate init(app: App) {
+            self.app = app
+        }
+
+        /// The app in front with no window: nothing about a window is recorded.
+        static func noWindow(app: Target) -> Expected {
+            Expected(app: app.app)
         }
 
         var description: String {
-            "\(app.bundleId) | \(window) | \(url ?? "no URL") | \(page ?? "no page title") | \(document.map { "document \($0)" } ?? "no document")"
+            let window = window.map { "\($0) (\(role ?? "-")/\(subrole ?? "-"), main \(isMainWindow.map(String.init) ?? "-"), full screen \(isFullScreen.map(String.init) ?? "-"))" } ?? "no window"
+            return "\(app.bundleId) | \(window) | \(url ?? "no URL") | \(page ?? "no page title") | \(document.map { "document \($0)" } ?? "no document")"
         }
     }
 
@@ -227,6 +291,8 @@ enum E2E {
         let sentMs: Int64
         let doneMs: Int64
         var endMs: Int64
+        /// Its row must start before this (`Run.expectRowStart(before:)`).
+        let rowStartsBeforeMs: Int64?
     }
 
     struct Row: CustomStringConvertible {
@@ -234,6 +300,7 @@ enum E2E {
         let endMs: Int64
         let app: String?
         let appPath: String?
+        let appName: String?
         let window: String?
         let url: String?
         let page: String?
@@ -246,37 +313,28 @@ enum E2E {
         let isScreenLocked: Int64
 
         var asExpected: Expected? {
-            guard let app, let window else {
+            guard let app else {
                 return nil
             }
-            return Expected(app: App(bundleId: app, path: appPath ?? ""), window: window, url: url, page: page, document: document)
-        }
-
-        /// What else must hold for every row of a step.
-        var problems: [String] {
-            var p: [String] = []
-            if role != "AXWindow" || subrole != "AXStandardWindow" {
-                p.append("window role \(role ?? "nil") / \(subrole ?? "nil")")
-            }
-            if isMainWindow != 1 {
-                p.append("is_main_window \(isMainWindow.map(String.init) ?? "nil")")
-            }
-            if isFullScreen != 0 {
-                p.append("is_full_screen \(isFullScreen.map(String.init) ?? "nil")")
-            }
-            if isScreenLocked != 0 {
-                p.append("screen locked")
-            }
-            return p
+            var e = Expected(app: App(bundleId: app, path: appPath ?? "", name: appName ?? ""))
+            e.window = window
+            e.url = url
+            e.page = page
+            e.document = document
+            e.role = role
+            e.subrole = subrole
+            e.isMainWindow = isMainWindow
+            e.isFullScreen = isFullScreen
+            return e
         }
 
         /// Everything recorded: two rows in a row with the same are a split for nothing.
         var content: String {
-            "\(description) | \(appPath ?? "no path") | \(role ?? "-")/\(subrole ?? "-") | main \(isMainWindow.map(String.init) ?? "nil") | full screen \(isFullScreen.map(String.init) ?? "nil") | idle \(isInputIdle) | locked \(isScreenLocked)"
+            "\(asExpected?.description ?? "no app") | \(appPath ?? "no path") | \(appName ?? "no name") | idle \(isInputIdle) | locked \(isScreenLocked)"
         }
 
         var description: String {
-            "\(app ?? "no app") | \(window ?? "no title") | \(url ?? "no URL") | \(page ?? "no page title") | \(document.map { "document \($0)" } ?? "no document")"
+            asExpected?.description ?? "no app\(isScreenLocked != 0 ? " (screen locked)" : "")"
         }
     }
 
@@ -289,6 +347,8 @@ enum E2E {
         let bee: String
         let frame: String
         let three: String
+        /// Titled "Loading …" until 450 ms after it has loaded, then "Loaded …".
+        let settle: String
 
         init(dir: URL, runId: String) throws {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -309,6 +369,14 @@ enum E2E {
             // is its own origin).
             frame = try page("frame.html", "Frame \(runId)", "<iframe srcdoc=\"<input id=i>\" width=600 height=200></iframe>")
             three = try page("three.html", "Three \(runId)")
+            settle = try page("settle.html", "Loading \(runId)", """
+                <script>
+                addEventListener('load', () => setTimeout(() => {
+                    window.renamedAtMs = Date.now();
+                    document.title = \(E2E.jsString("Loaded \(runId)"));
+                }, 450));
+                </script>
+                """)
         }
     }
 
@@ -338,27 +406,32 @@ enum E2E {
     /// A running copy of `E2ETarget`, driven through its command files.
     final class Target {
         let bundleId: String
-        let bundleUrl: URL?
-        let controlDir: URL?
+        let bundleUrl: URL
+        /// As in its Info.plist (scripts/e2e.sh), which is what the tracker records.
+        let name: String
+        let controlDir: URL
         var pid: pid_t?
         private var next = 1
 
-        init(bundleId: String, bundleUrl: URL? = nil, controlDir: URL? = nil) {
+        init(bundleId: String, bundleUrl: URL, name: String, controlDir: URL) {
             self.bundleId = bundleId
             self.bundleUrl = bundleUrl
+            self.name = name
             self.controlDir = controlDir
         }
 
         var app: App {
-            App(bundleId: bundleId, path: bundleUrl?.path ?? "")
+            App(bundleId: bundleId, path: bundleUrl.path, name: name)
+        }
+
+        /// A page inside the app's bundle (scripts/e2e.sh puts it there): its own UI, not content.
+        var ownPage: String {
+            bundleUrl.appendingPathComponent("Contents/Resources/own.html").absoluteString
         }
 
         /// Returns the command's result (`eval`'s), nil if none.
         @discardableResult
         func send(_ op: String, _ fields: [String: Any] = [:]) async throws -> Any? {
-            guard let controlDir else {
-                throw E2EError("\(bundleId) isn't driven")
-            }
             let n = next
             next += 1
             var command = fields
@@ -411,8 +484,11 @@ enum E2E {
         let dir: URL
         let apps: URL
         let pages: Pages
+        let tracker: URL
         let a: Target
         let b: Target
+        /// Shows only its own UI (a page from its bundle), never content.
+        let c: Target
         let chrome: Chrome?
         /// The pages over HTTP, once the server runs (with Chrome only).
         private(set) var served: Served?
@@ -423,27 +499,49 @@ enum E2E {
         /// When the tracker was sent SIGTERM, and when it had exited.
         private var stopSentMs: Int64?
         private var stopDoneMs: Int64?
+        /// Set by the step in progress (`expectRowStart(before:)`).
+        private var rowStartsBeforeMs: Int64?
 
         var databasePath: String {
             dir.appendingPathComponent("tracker.db").path
         }
 
+        /// Fails unless every app given exists and the run folder exists and is empty: an old
+        /// database or Chrome profile in it would make the checks see a previous run.
         init() throws {
             id = String(UUID().uuidString.prefix(6))
-            dir = URL(fileURLWithPath: E2E.environment["TIMETRACKER_E2E_RUN"]!)
-            apps = URL(fileURLWithPath: E2E.environment["TIMETRACKER_E2E_APPS"]!)
+            func folder(_ variable: String, isEmpty: Bool = false) throws -> URL {
+                let path = E2E.environment[variable] ?? ""
+                var isDirectory: ObjCBool = false
+                guard !path.isEmpty, FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
+                    throw E2EError("\(variable)=\(path): not a folder")
+                }
+                if isEmpty, try !FileManager.default.contentsOfDirectory(atPath: path).isEmpty {
+                    throw E2EError("\(variable)=\(path): not empty")
+                }
+                return URL(fileURLWithPath: path)
+            }
+            tracker = try folder("TIMETRACKER_E2E_TRACKER")
+            let dir = try folder("TIMETRACKER_E2E_RUN", isEmpty: true)
+            let apps = try folder("TIMETRACKER_E2E_APPS")
+            self.dir = dir
+            self.apps = apps
             pages = try Pages(dir: dir.appendingPathComponent("pages"), runId: id)
-            let dir = dir
-            let apps = apps
             func target(_ letter: String, _ bundleId: String) throws -> Target {
                 let control = dir.appendingPathComponent("control-\(letter)")
                 try FileManager.default.createDirectory(at: control, withIntermediateDirectories: true)
-                return Target(bundleId: bundleId, bundleUrl: apps.appendingPathComponent("E2E Target \(letter.uppercased()).app"), controlDir: control)
+                let name = "E2E Target \(letter.uppercased())"
+                let bundle = apps.appendingPathComponent("\(name).app")
+                guard FileManager.default.fileExists(atPath: bundle.path) else {
+                    throw E2EError("no \(bundle.path)")
+                }
+                return Target(bundleId: bundleId, bundleUrl: bundle, name: name, controlDir: control)
             }
             a = try target("a", E2E.targetIds[0])
             b = try target("b", E2E.targetIds[1])
+            c = try target("c", E2E.targetIds[2])
             if let path = E2E.environment["TIMETRACKER_E2E_CHROME"], !path.isEmpty {
-                chrome = Chrome(appUrl: URL(fileURLWithPath: path), profile: dir.appendingPathComponent("chrome-profile"))
+                chrome = try Chrome(appUrl: try folder("TIMETRACKER_E2E_CHROME"), profile: dir.appendingPathComponent("chrome-profile"))
             }
             else {
                 chrome = nil
@@ -477,15 +575,15 @@ enum E2E {
             let tracker = NSWorkspace.OpenConfiguration()
             tracker.createsNewApplicationInstance = true
             tracker.activates = false
-            tracker.environment = ["TIMETRACKER_DB": databasePath]
-            trackerPid = try await NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: E2E.environment["TIMETRACKER_E2E_TRACKER"]!), configuration: tracker).processIdentifier
+            tracker.environment = ["TIMETRACKER_DB": databasePath, "TIMETRACKER_POLL_SECONDS": String(E2E.trackerPollSeconds)]
+            trackerPid = try await NSWorkspace.shared.openApplication(at: self.tracker, configuration: tracker).processIdentifier
 
-            for target in [a, b] {
+            for target in [a, b, c] {
                 let config = NSWorkspace.OpenConfiguration()
                 config.createsNewApplicationInstance = true
                 config.activates = false
-                config.arguments = ["--control", target.controlDir!.path]
-                target.pid = try await NSWorkspace.shared.openApplication(at: target.bundleUrl!, configuration: config).processIdentifier
+                config.arguments = ["--control", target.controlDir.path]
+                target.pid = try await NSWorkspace.shared.openApplication(at: target.bundleUrl, configuration: config).processIdentifier
             }
             try await b.send("openWindow", ["id": "bee", "title": "Bee \(id)", "pages": [pages.bee]])
             try await activate(a)
@@ -509,17 +607,32 @@ enum E2E {
             if !steps.isEmpty {
                 steps[steps.count - 1].endMs = sentMs
             }
+            rowStartsBeforeMs = nil
             try await action()
             let doneMs = nowMs()
-            steps.append(Step(name: name, expected: expected, sentMs: sentMs, doneMs: doneMs, endMs: doneMs + E2E.holdMs))
+            steps.append(Step(name: name, expected: expected, sentMs: sentMs, doneMs: doneMs, endMs: doneMs + E2E.holdMs, rowStartsBeforeMs: rowStartsBeforeMs))
             try await Task.sleep(for: .milliseconds(E2E.holdMs))
+        }
+
+        /// Asks the tracker for a sample now (SIGUSR1), for a step whose change sends no event
+        /// or that changes nothing. The poll is turned off (`trackerPollSeconds`).
+        func sampleNow() {
+            if let trackerPid {
+                kill(trackerPid, SIGUSR1)
+            }
+        }
+
+        /// The step in progress: its row must start before `ms`, e.g. before a change that
+        /// settling should have backdated it over.
+        func expectRowStart(before ms: Int64) {
+            rowStartsBeforeMs = ms
         }
 
         /// Brings `target` to the front, as clicking its Dock icon would.
         func activate(_ target: Target) async throws {
             let config = NSWorkspace.OpenConfiguration()
             config.activates = true
-            _ = try await NSWorkspace.shared.openApplication(at: target.bundleUrl!, configuration: config)
+            _ = try await NSWorkspace.shared.openApplication(at: target.bundleUrl, configuration: config)
             let deadline = Date().addingTimeInterval(5)
             while try E2E.frontmostPid() != target.pid {
                 guard Date() < deadline else {
@@ -553,12 +666,13 @@ enum E2E {
         /// Kills what we started and brings back the app that was in front. The run folder is
         /// left to scripts/e2e.sh.
         private func cleanUp() async {
-            for pid in [trackerPid, a.pid, b.pid].compactMap({ $0 }) {
+            for pid in [trackerPid, a.pid, b.pid, c.pid].compactMap({ $0 }) {
                 kill(pid, SIGKILL)
             }
             trackerPid = nil
             a.pid = nil
             b.pid = nil
+            c.pid = nil
             chrome?.kill()
             server?.stop()
             server = nil
@@ -572,7 +686,7 @@ enum E2E {
         func rows() throws -> [Row] {
             let db = try Database(path: databasePath)
             return try db.query("""
-                SELECT i.start_ms, i.end_ms, a.identifier, a.app_path, t.title, u.url, pt.title, d.path, r.role, r.subrole,
+                SELECT i.start_ms, i.end_ms, a.identifier, a.app_path, a.name, t.title, u.url, pt.title, d.path, r.role, r.subrole,
                        i.is_main_window, i.is_full_screen, i.is_input_idle, i.is_screen_locked
                 FROM tracker_interval i
                 LEFT JOIN tracker_app a ON a.id = i.app_id
@@ -584,9 +698,9 @@ enum E2E {
                 ORDER BY i.start_ms
                 """).map { c in
                 Row(
-                    startMs: c[0].int ?? 0, endMs: c[1].int ?? 0, app: c[2].text, appPath: c[3].text, window: c[4].text,
-                    url: c[5].text, page: c[6].text, document: c[7].text, role: c[8].text, subrole: c[9].text,
-                    isMainWindow: c[10].int, isFullScreen: c[11].int, isInputIdle: c[12].int ?? -1, isScreenLocked: c[13].int ?? -1
+                    startMs: c[0].int ?? 0, endMs: c[1].int ?? 0, app: c[2].text, appPath: c[3].text, appName: c[4].text,
+                    window: c[5].text, url: c[6].text, page: c[7].text, document: c[8].text, role: c[9].text, subrole: c[10].text,
+                    isMainWindow: c[11].int, isFullScreen: c[12].int, isInputIdle: c[13].int ?? -1, isScreenLocked: c[14].int ?? -1
                 )
             }
         }
@@ -610,12 +724,15 @@ enum E2E {
         ///   in progress may go on (the previous state, checked by the previous step), but
         ///   nothing in between, such as a page half loaded or an old title with the new URL;
         /// - a step that changes something doesn't find its row started before it (the change
-        ///   was missed).
+        ///   was missed);
+        /// - a step that set `expectRowStart(before:)` finds its row started before then.
         ///
         /// Over the run: rows don't overlap or leave gaps, no two rows in a row record the same
-        /// (a split for nothing), and the last row ends when the tracker was stopped. Each app's
-        /// page reading mode was decided on (`tracker_app_page_probe`) at its first step with a
-        /// page.
+        /// (a split for nothing), and the last row ends when the tracker was stopped. Each app
+        /// that showed a page had page reading decided on (`tracker_app_page_probe`) at its first
+        /// step with one; each app that never did was probed but not decided.
+        ///
+        /// Last, leaves `checked` in the run folder for scripts/e2e.sh.
         ///
         /// Input idle isn't checked: the test makes no input, so once a minute has passed since
         /// the last real input the run goes idle (and back, if someone moves the mouse).
@@ -630,7 +747,7 @@ enum E2E {
             }
             print("e2e: rows (seconds from the first step):")
             for row in rows where row.endMs >= origin {
-                print("  \(t(row.startMs))–\(t(row.endMs))  \(row)\(row.problems.isEmpty ? "" : "  [\(row.problems.joined(separator: ", "))]")")
+                print("  \(t(row.startMs))–\(t(row.endMs))  \(row)")
             }
             print("e2e: steps (sent–done, then held until the next):")
             for step in steps {
@@ -644,21 +761,16 @@ enum E2E {
                     Issue.record("\(step.name): no row")
                     continue
                 }
-                for row in during {
-                    if row.asExpected != step.expected {
-                        Issue.record("\(step.name) at \(t(max(row.startMs, checkedFrom))): expected \(step.expected), got \(row)")
-                    }
-                    else if !row.problems.isEmpty {
-                        Issue.record("\(step.name): \(row.problems.joined(separator: ", "))")
-                    }
+                for row in during where row.asExpected != step.expected || row.isScreenLocked != 0 {
+                    Issue.record("\(step.name) at \(t(max(row.startMs, checkedFrom))): expected \(step.expected), got \(row)")
                 }
                 for row in rows where row.startMs >= step.sentMs && row.startMs < checkedFrom && row.endMs <= checkedFrom {
-                    if row.asExpected != step.expected {
+                    if row.asExpected != step.expected || row.isScreenLocked != 0 {
                         Issue.record("\(step.name): passing row at \(t(row.startMs))–\(t(row.endMs)) during the changeover: \(row)")
                     }
-                    else if !row.problems.isEmpty {
-                        Issue.record("\(step.name): \(row.problems.joined(separator: ", "))")
-                    }
+                }
+                if let before = step.rowStartsBeforeMs, let first = during.first, first.startMs >= before {
+                    Issue.record("\(step.name): its row starts at \(t(first.startMs)), expected before \(t(before))")
                 }
                 let isChange = i == 0 || steps[i - 1].expected != step.expected
                 if isChange, let first = during.first, first.asExpected == step.expected, first.startMs < step.sentMs {
@@ -692,13 +804,21 @@ enum E2E {
                 }
             }
 
+            // Apps that showed a page: decided yes at their first step with one. Apps that never
+            // did: probed (it showed a window), but not decided.
             let probes = try pageProbes()
             for app in Set(steps.map(\.expected.app.bundleId)).sorted() {
-                guard let step = steps.first(where: { $0.expected.app.bundleId == app && $0.expected.url != nil }) else {
-                    continue
-                }
                 guard let probe = probes[app] else {
                     Issue.record("\(app): no page probe row")
+                    continue
+                }
+                if probe.probeCount < 1 {
+                    Issue.record("\(app): probe_count \(probe.probeCount)")
+                }
+                guard let step = steps.first(where: { $0.expected.app.bundleId == app && $0.expected.url != nil }) else {
+                    if probe.hasContentPages != nil || probe.decidedAtMs != nil {
+                        Issue.record("\(app) never showed a content page, but page reading was decided: has_content_pages \(probe.hasContentPages.map(String.init) ?? "nil")")
+                    }
                     continue
                 }
                 if probe.hasContentPages != 1 {
@@ -707,15 +827,12 @@ enum E2E {
                 if let decided = probe.decidedAtMs, decided < step.sentMs || decided > step.doneMs + E2E.latencyMs {
                     Issue.record("\(app): page reading decided at \(t(decided)), not during \"\(step.name)\", its first step with a page (\(t(step.sentMs))–\(t(step.doneMs + E2E.latencyMs)))")
                 }
-                if probe.probeCount < 1 {
-                    Issue.record("\(app): probe_count \(probe.probeCount)")
-                }
             }
-        }
-    }
 
-    static func nowMsValue() -> Int64 {
-        Int64(Date().timeIntervalSince1970 * 1000)
+            // For scripts/e2e.sh: `swift test` passes a skipped test too.
+            let note = "steps=\(steps.count)\nchrome=\(steps.contains { $0.expected.app.bundleId == chrome?.app.bundleId } ? 1 : 0)\n"
+            try note.write(to: dir.appendingPathComponent("checked"), atomically: true, encoding: .utf8)
+        }
     }
 
     /// From LaunchServices, not `NSWorkspace.frontmostApplication`, which only updates while
@@ -745,10 +862,6 @@ enum E2E {
         process.waitUntilExit()
         return String(decoding: data, as: UTF8.self)
     }
-}
-
-private func nowMs() -> Int64 {
-    E2E.nowMsValue()
 }
 
 struct E2EError: Error, CustomStringConvertible {

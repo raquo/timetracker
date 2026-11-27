@@ -6,7 +6,7 @@ import ApplicationServices
 final class Tracker {
     /// Backstop only: app switches and window/title changes arrive as events.
     /// The poll catches what events miss, and idle / unidle transitions.
-    static let pollIntervalSeconds = 5
+    static let defaultPollIntervalSeconds = 5
 
     /// Coalesces bursts of change events (e.g. a page updating its title repeatedly).
     static let eventDelayMs = 300
@@ -35,6 +35,7 @@ final class Tracker {
     private let pageReading: PageReadingPolicy
     private let settler = Settler()
     private let windowObserver: WindowObserver
+    private let pollIntervalSeconds: Int
     private var timer: DispatchSourceTimer?
     private var signalSources: [DispatchSourceSignal] = []
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
@@ -46,7 +47,10 @@ final class Tracker {
     private var isAxTrusted: Bool?
     private var scheduledTicks: Set<DelayedTick> = []
 
-    init(db: Database) throws {
+    /// `pollIntervalSeconds` other than the default is for the end-to-end test, so a missed
+    /// event isn't covered up by the poll.
+    init(db: Database, pollIntervalSeconds: Int = Tracker.defaultPollIntervalSeconds) throws {
+        self.pollIntervalSeconds = pollIntervalSeconds
         recorder = try Recorder(store: IntervalStore(db: db))
         pageReading = try PageReadingPolicy(store: PageReadingStore(db: db))
         sampler = Sampler(pageReading: pageReading)
@@ -99,7 +103,7 @@ final class Tracker {
         }
 
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now(), repeating: .seconds(Self.pollIntervalSeconds), leeway: .milliseconds(250))
+        timer.schedule(deadline: .now(), repeating: .seconds(pollIntervalSeconds), leeway: .milliseconds(250))
         timer.setEventHandler { [weak self] in self?.tick() }
         timer.resume()
         self.timer = timer
@@ -115,6 +119,15 @@ final class Tracker {
             source.resume()
             signalSources.append(source)
         }
+        // SIGUSR1: sample now. For the end-to-end test, to check a change that sends no event
+        // without waiting for the poll.
+        signal(SIGUSR1, SIG_IGN)
+        let sampleNow = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: queue)
+        sampleNow.setEventHandler { [weak self] in
+            self?.tick()
+        }
+        sampleNow.resume()
+        signalSources.append(sampleNow)
 
         // Only an app bundle can hold the permission; a bare binary would attribute the prompt to its terminal.
         if Bundle.main.bundleIdentifier != nil {

@@ -58,8 +58,10 @@ public enum TrackerMain {
         }
 
         let path: String
+        let pollIntervalSeconds: Int
         do {
             path = try databasePath()
+            pollIntervalSeconds = try pollInterval()
             guard try InstanceLock.acquire(databasePath: path) else {
                 // Exit 0: under launchd (KeepAlive) this instance is retried every ThrottleInterval,
                 // so it takes over if the other one goes away.
@@ -75,7 +77,7 @@ public enum TrackerMain {
         do {
             let db = try Database(path: path)
             try Schema.migrate(db)
-            tracker = try Tracker(db: db)
+            tracker = try Tracker(db: db, pollIntervalSeconds: pollIntervalSeconds)
             log.info("Using database at \(path, privacy: .public)")
         }
         catch {
@@ -105,6 +107,18 @@ public enum TrackerMain {
         return dir.appendingPathComponent("timetracker.db").path
     }
 
+    /// `TIMETRACKER_POLL_SECONDS` overrides the poll interval, for the end-to-end test. A value
+    /// that isn't a positive whole number stops the tracker, rather than being ignored.
+    static func pollInterval(environment: [String: String] = ProcessInfo.processInfo.environment) throws -> Int {
+        guard let override = environment["TIMETRACKER_POLL_SECONDS"], !override.isEmpty else {
+            return Tracker.defaultPollIntervalSeconds
+        }
+        guard let seconds = Int(override), seconds > 0 else {
+            throw TrackerMainError("TIMETRACKER_POLL_SECONDS=\(override) isn't a positive whole number")
+        }
+        return seconds
+    }
+
     /// Logs `message` and also prints it to stderr, for runs from a terminal.
     private static func announce(_ message: String, level: OSLogType) {
         log.log(level: level, "\(message, privacy: .public)")
@@ -114,5 +128,13 @@ public enum TrackerMain {
     private static func fail(_ message: String) -> Never {
         announce(message, level: .fault)
         exit(1)
+    }
+}
+
+struct TrackerMainError: Error, CustomStringConvertible {
+    let description: String
+
+    init(_ description: String) {
+        self.description = description
     }
 }

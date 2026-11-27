@@ -22,6 +22,9 @@ Events, with a slow poll as a backstop. Code: `Tracker`, `WindowObserver`.
 | Any left click, anywhere (`leftMouseUp`) | 600 ms after the first click (see below) | changes that send no Accessibility event; the delay gives the app time to react to the click |
 | Lock, unlock, wake | at once | see [idle-and-away.md](idle-and-away.md) |
 | Poll | every 5 s | everything else: URL-only changes, going idle and back |
+| SIGUSR1 | at once | nothing in normal use: for the [end-to-end test](end-to-end-tests.md) |
+
+**Test hooks.** `TIMETRACKER_POLL_SECONDS` sets the poll interval (a positive whole number of seconds; anything else stops the tracker at startup), and SIGUSR1 asks for a sample. The end-to-end test sets the poll to an hour, so a missed event fails instead of being covered up by a poll that happens to come right after, and asks for samples where a step's change sends no event. Code: `TrackerMain.pollInterval`, `Tracker`.
 
 **Several events, one sample.** The first event schedules a sample 300 ms later; events that arrive before it's taken add nothing, since that sample will see their effect too. Example: a page that sets its title three times within 200 ms while loading gets one sample, 300 ms after the first change, not three. The timer isn't restarted by later events, so a stream of events (a title that changes every 100 ms for 2 s) still gets a sample every ~300 ms. Clicks work the same way, with 600 ms, and separately from events.
 

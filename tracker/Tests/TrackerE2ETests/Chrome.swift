@@ -8,10 +8,11 @@ extension E2E {
     /// scripts, never clicks or keystrokes. Same bundle ID as the user's Chrome, so it's told
     /// apart by pid.
     final class Chrome {
-        static let bundleId = "com.google.Chrome"
         static let windowSuffix = " - Google Chrome"
 
         let appUrl: URL
+        /// From its Info.plist, as the tracker records it.
+        let app: App
         let profile: URL
         var pid: pid_t?
         private var devTools: DevTools?
@@ -22,13 +23,14 @@ extension E2E {
             let session: String
         }
 
-        init(appUrl: URL, profile: URL) {
+        init(appUrl: URL, profile: URL) throws {
+            guard let bundle = Bundle(url: appUrl), let bundleId = bundle.bundleIdentifier else {
+                throw E2EError("\(appUrl.path) isn't an app")
+            }
+            let name = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") ?? bundle.object(forInfoDictionaryKey: "CFBundleName")
             self.appUrl = appUrl
             self.profile = profile
-        }
-
-        var app: App {
-            App(bundleId: Self.bundleId, path: appUrl.path)
+            app = App(bundleId: bundleId, path: appUrl.path, name: name as? String ?? "")
         }
 
         /// Starts Chrome in the background on `url`, waits for the page to load, then brings it

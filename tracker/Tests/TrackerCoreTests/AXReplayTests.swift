@@ -67,6 +67,13 @@ struct AxReplayTests {
         )
     }
 
+    /// A missing folder would leave the tests below with no cases, passing; an expectation for
+    /// a renamed or deleted fixture would go unnoticed.
+    @Test func everyFixtureHasAnExpectationAndBack() {
+        #expect(!AxFixtures.names.isEmpty, "no fixtures in \(AxFixtures.directory.path)")
+        #expect(Set(Self.expected.keys) == Set(AxFixtures.names))
+    }
+
     @Test(arguments: AxFixtures.names)
     func replayFindsWhatTheLiveSearchFound(name: String) throws {
         let fixture = try AxFixtures.load(name)
@@ -85,7 +92,7 @@ struct AxReplayTests {
     static func snapshot(_ replay: Replay, bundlePath: String?) -> Snapshot {
         var snapshot = Snapshot()
         if let window = Sampler.readFocusedWindow(of: replay.app, into: &snapshot) {
-            let page = PageSearch.choose(from: PageSearch.contentPages(in: window, bundlePath: bundlePath), app: replay.app)
+            let page = Sampler.findPage(in: window, app: replay.app, bundlePath: bundlePath).page
             snapshot.pageUrl = page?.url
             snapshot.pageTitle = page?.title
         }
