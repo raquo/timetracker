@@ -35,67 +35,67 @@ struct EndToEndTests {
         let c = run.c
         let pages = run.pages
 
-        try await run.step("plain window", expect: .init(app: a, window: "Plain \(r)")) {
+        try await run.step("plain window", expect: .init(a, window: "Plain \(r)")) {
             try await a.send("openWindow", ["id": "plain", "title": "Plain \(r)"])
         }
-        try await run.step("web window", expect: .init(app: a, window: "Web \(r)", url: pages.one, page: "One \(r)")) {
+        try await run.step("web window", expect: .init(a, window: "Web \(r)", url: pages.one, page: "One \(r)")) {
             try await a.send("openWindow", ["id": "web", "title": "Web \(r)", "pages": [pages.one]])
         }
-        try await run.step("navigate", expect: .init(app: a, window: "Web \(r)", url: pages.two, page: "Two \(r)")) {
+        try await run.step("navigate", expect: .init(a, window: "Web \(r)", url: pages.two, page: "Two \(r)")) {
             try await a.send("navigate", ["id": "web", "url": pages.two])
         }
         // WebKit sends no event for this (docs/page-reading.md#limitations), so only the sample
         // asked for records it.
-        try await run.step("page renames itself", expect: .init(app: a, window: "Web \(r)", url: pages.two, page: "Two retitled \(r)")) {
+        try await run.step("page renames itself", expect: .init(a, window: "Web \(r)", url: pages.two, page: "Two retitled \(r)")) {
             try await a.send("eval", ["id": "web", "js": "document.title = \(E2E.jsString("Two retitled \(r)"))"])
             try await a.waitUntil(window: "web", "document.title === \(E2E.jsString("Two retitled \(r)"))", "the title didn't change")
             run.sampleNow()
         }
         // The fragment isn't recorded (docs/url-scrubbing.md), so nothing changes.
-        try await run.step("hash change", expect: .init(app: a, window: "Web \(r)", url: pages.two, page: "Two retitled \(r)")) {
+        try await run.step("hash change", expect: .init(a, window: "Web \(r)", url: pages.two, page: "Two retitled \(r)")) {
             try await a.send("eval", ["id": "web", "js": "location.hash = 'part'"])
             try await a.waitUntil(window: "web", "location.hash === '#part'", "the hash didn't change")
             run.sampleNow()
         }
         try await run.step(
             "secret in URL",
-            expect: .init(app: a, window: "Web \(r)", url: pages.secretScrubbed, page: "Secret \(r)")
+            expect: .init(a, window: "Web \(r)", url: pages.secretScrubbed, page: "Secret \(r)")
         ) {
             try await a.send("navigate", ["id": "web", "url": pages.secret])
         }
         try await run.step(
             "window renamed",
-            expect: .init(app: a, window: "Web renamed \(r)", url: pages.secretScrubbed, page: "Secret \(r)")
+            expect: .init(a, window: "Web renamed \(r)", url: pages.secretScrubbed, page: "Secret \(r)")
         ) {
             try await a.send("setTitle", ["id": "web", "title": "Web renamed \(r)"])
         }
-        try await run.step("other window", expect: .init(app: a, window: "Plain \(r)")) {
+        try await run.step("other window", expect: .init(a, window: "Plain \(r)")) {
             try await a.send("focusWindow", ["id": "plain"])
         }
-        try await run.step("other app", expect: .init(app: b, window: "Bee \(r)", url: pages.bee, page: "Bee page \(r)")) {
+        try await run.step("other app", expect: .init(b, window: "Bee \(r)", url: pages.bee, page: "Bee page \(r)")) {
             try await run.activate(b)
         }
-        try await run.step("back", expect: .init(app: a, window: "Plain \(r)")) {
+        try await run.step("back", expect: .init(a, window: "Plain \(r)")) {
             try await run.activate(a)
         }
         // Two pages and focus in neither: no page is recorded (can't tell which one is being read).
-        try await run.step("split, no focus", expect: .init(app: a, window: "Split \(r)")) {
+        try await run.step("split, no focus", expect: .init(a, window: "Split \(r)")) {
             try await a.send("openWindow", ["id": "split", "title": "Split \(r)", "pages": [pages.one, pages.two], "isFocusCleared": true])
             try await a.expectFocus(window: "split", inPage: nil, of: 2)
         }
-        try await run.step("split, focus right", expect: .init(app: a, window: "Split \(r)", url: pages.two, page: "Two \(r)")) {
+        try await run.step("split, focus right", expect: .init(a, window: "Split \(r)", url: pages.two, page: "Two \(r)")) {
             try await a.send("focusPage", ["id": "split", "index": 1])
             try await a.expectFocus(window: "split", inPage: 1, of: 2)
         }
-        try await run.step("split, focus left", expect: .init(app: a, window: "Split \(r)", url: pages.one, page: "One \(r)")) {
+        try await run.step("split, focus left", expect: .init(a, window: "Split \(r)", url: pages.one, page: "One \(r)")) {
             try await a.send("focusPage", ["id": "split", "index": 0])
             try await a.expectFocus(window: "split", inPage: 0, of: 2)
         }
-        try await run.step("page with iframe", expect: .init(app: a, window: "Frame \(r)", url: pages.frame, page: "Frame \(r)")) {
+        try await run.step("page with iframe", expect: .init(a, window: "Frame \(r)", url: pages.frame, page: "Frame \(r)")) {
             try await a.send("openWindow", ["id": "frame", "title": "Frame \(r)", "pages": [pages.frame]])
         }
         // The iframe is part of the page: still the outer page.
-        try await run.step("focus in iframe", expect: .init(app: a, window: "Frame \(r)", url: pages.frame, page: "Frame \(r)")) {
+        try await run.step("focus in iframe", expect: .init(a, window: "Frame \(r)", url: pages.frame, page: "Frame \(r)")) {
             try await a.send("focusPage", ["id": "frame"])
             try await a.send("eval", ["id": "frame", "js": "document.querySelector('iframe').contentDocument.getElementById('i').focus()"])
             try await a.waitUntil(
@@ -109,7 +109,7 @@ struct EndToEndTests {
         // first look (300 ms after the load event) and its second (400 ms later). Settling must
         // hide the "Loading" state: the row is the final page, starting when the change was first
         // seen, so before the rename (`Settler`).
-        try await run.step("page settles after loading", expect: .init(app: a, window: "Frame \(r)", url: pages.settle, page: "Loaded \(r)")) {
+        try await run.step("page settles after loading", expect: .init(a, window: "Frame \(r)", url: pages.settle, page: "Loaded \(r)")) {
             try await a.send("navigate", ["id": "frame", "url": pages.settle])
             try await a.waitUntil(window: "frame", "document.title === \(E2E.jsString("Loaded \(r)"))", "the page didn't rename itself")
             guard let renamedAtMs = try await a.send("eval", ["id": "frame", "js": "window.renamedAtMs"]) as? NSNumber else {
@@ -117,19 +117,19 @@ struct EndToEndTests {
             }
             run.expectRowStart(before: renamedAtMs.int64Value)
         }
-        try await run.step("plain window again", expect: .init(app: a, window: "Plain \(r)")) {
+        try await run.step("plain window again", expect: .init(a, window: "Plain \(r)")) {
             try await a.send("focusWindow", ["id": "plain"])
         }
         // An app whose only page is its own UI, loaded from its bundle: not content, so no page
         // is recorded, and page reading stays undecided (checked in `Run.check`).
-        try await run.step("own UI only", expect: .init(app: c, window: "Own \(r)")) {
+        try await run.step("own UI only", expect: .init(c, window: "Own \(r)")) {
             try await c.send("openWindow", ["id": "own", "title": "Own \(r)", "pages": [c.ownPage]])
             try await run.activate(c)
         }
-        try await run.step("panel", expect: .init(app: c, window: "Panel \(r)", subrole: "AXFloatingWindow", isMainWindow: false)) {
+        try await run.step("panel", expect: .init(c, window: "Panel \(r)", subrole: "AXFloatingWindow", isMainWindow: false)) {
             try await c.send("openWindow", ["id": "panel", "title": "Panel \(r)", "isPanel": true])
         }
-        try await run.step("no window", expect: .noWindow(app: c)) {
+        try await run.step("no window", expect: .noWindow(c)) {
             try await c.send("closeWindow", ["id": "panel"])
             try await c.send("closeWindow", ["id": "own"])
         }
@@ -166,7 +166,7 @@ struct EndToEndTests {
         // alone (and updates the page's URL only with the next change), so that would wait for the
         // 5 s poll (docs/page-reading.md#limitations).
         try await run.step("Chrome: pushState and title", expect: shows("Pushed \(r)", web.pushedScrubbed)) {
-            try await chrome.eval(first, "history.pushState(null, '', \(E2E.jsString(web.pushedPath))); document.title = \(E2E.jsString("Pushed \(r)"))")
+            try await chrome.eval(first, "history.pushState(null, '', \(E2E.jsString(E2E.Pages.pushedPath))); document.title = \(E2E.jsString("Pushed \(r)"))")
             try await chrome.waitUntil(first, "location.href === \(E2E.jsString(web.pushed))", "pushState didn't change the URL")
         }
         // The fragment isn't recorded, so nothing changes.
@@ -201,7 +201,7 @@ struct EndToEndTests {
         try await run.step("Chrome: own page", expect: shows("About Version", "chrome://version/")) {
             try await chrome.navigate(first, "chrome://version/")
         }
-        try await run.step("Chrome: other app", expect: .init(app: run.b, window: "Bee \(r)", url: run.pages.bee, page: "Bee page \(r)")) {
+        try await run.step("Chrome: other app", expect: .init(run.b, window: "Bee \(r)", url: run.pages.bee, page: "Bee page \(r)")) {
             try await run.activate(run.b)
         }
         try await run.step("Chrome: back", expect: shows("About Version", "chrome://version/")) {
@@ -251,8 +251,8 @@ enum E2E {
         var isFullScreen: Int64?
 
         /// A window of the test app: by default a standard main window.
-        init(app: Target, window: String, url: String? = nil, page: String? = nil, subrole: String = "AXStandardWindow", isMainWindow: Bool = true) {
-            self.init(app: app.app, window: window, url: url, page: page, document: nil, subrole: subrole, isMainWindow: isMainWindow)
+        init(_ target: Target, window: String, url: String? = nil, page: String? = nil, subrole: String = "AXStandardWindow", isMainWindow: Bool = true) {
+            self.init(app: target.app, window: window, url: url, page: page, document: nil, subrole: subrole, isMainWindow: isMainWindow)
         }
 
         /// A window that's not full screen.
@@ -274,8 +274,8 @@ enum E2E {
         }
 
         /// The app in front with no window: nothing about a window is recorded.
-        static func noWindow(app: Target) -> Expected {
-            Expected(app: app.app)
+        static func noWindow(_ target: Target) -> Expected {
+            Expected(app: target.app)
         }
 
         var description: String {
@@ -338,38 +338,54 @@ enum E2E {
         }
     }
 
-    /// The test's HTML pages, as the URLs the tracker should record.
+    /// The test's HTML pages under one base URL (the pages folder, or the page server serving
+    /// it), as loaded and as the tracker should record them. `write` makes the files.
     struct Pages {
         let one: String
         let two: String
-        let secret: String
-        let secretScrubbed: String
+        let three: String
         let bee: String
         let frame: String
-        let three: String
         /// Titled "Loading …" until 450 ms after it has loaded, then "Loaded …".
         let settle: String
+        let secret: String
+        let secretScrubbed: String
+        /// Where `pushState` goes (relative, from `two`), absolute, and as recorded. No such
+        /// file: the page only pretends to be there.
+        static let pushedPath = "pushed.html?session=abc&q=ok"
+        let pushed: String
+        let pushedScrubbed: String
 
-        init(dir: URL, runId: String) throws {
+        /// `base` ends with a slash.
+        init(base: String) {
+            one = base + "one.html"
+            two = base + "two.html"
+            three = base + "three.html"
+            bee = base + "bee.html"
+            frame = base + "frame.html"
+            settle = base + "settle.html"
+            secret = base + "secret.html?token=hunter2&q=ok#part"
+            secretScrubbed = base + "secret.html?token=REDACTED&q=ok"
+            pushed = base + Self.pushedPath
+            pushedScrubbed = base + "pushed.html?session=REDACTED&q=ok"
+        }
+
+        /// Writes the files `init` names into `dir`. Titles carry the run ID.
+        static func write(to dir: URL, runId: String) throws {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            func page(_ name: String, _ title: String, _ body: String = "") throws -> String {
+            func page(_ name: String, _ title: String, _ body: String = "") throws {
                 let html = "<!doctype html><title>\(title)</title><body><h1>\(title)</h1>\(body)</body>"
-                let file = dir.appendingPathComponent(name)
-                try html.write(to: file, atomically: true, encoding: .utf8)
-                return file.absoluteString
+                try html.write(to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
             }
-            one = try page("one.html", "One \(runId)")
-            two = try page("two.html", "Two \(runId)")
-            let secretPage = try page("secret.html", "Secret \(runId)")
-            secret = secretPage + "?token=hunter2&q=ok#part"
-            secretScrubbed = secretPage + "?token=REDACTED&q=ok"
-            bee = try page("bee.html", "Bee page \(runId)")
+            try page("one.html", "One \(runId)")
+            try page("two.html", "Two \(runId)")
+            try page("three.html", "Three \(runId)")
+            try page("bee.html", "Bee page \(runId)")
             // srcdoc: same origin as the outer page, so its script can move focus into the iframe
             // (a script can't focus into another origin's frame without a click; each file:// page
             // is its own origin).
-            frame = try page("frame.html", "Frame \(runId)", "<iframe srcdoc=\"<input id=i>\" width=600 height=200></iframe>")
-            three = try page("three.html", "Three \(runId)")
-            settle = try page("settle.html", "Loading \(runId)", """
+            try page("frame.html", "Frame \(runId)", "<iframe srcdoc=\"<input id=i>\" width=600 height=200></iframe>")
+            try page("settle.html", "Loading \(runId)", """
                 <script>
                 addEventListener('load', () => setTimeout(() => {
                     window.renamedAtMs = Date.now();
@@ -377,29 +393,7 @@ enum E2E {
                 }, 450));
                 </script>
                 """)
-        }
-    }
-
-    /// The same pages served over HTTP (`PageServer`), for Chrome.
-    struct Served {
-        let one: String
-        let two: String
-        let three: String
-        let secret: String
-        let secretScrubbed: String
-        /// Where `pushState` goes (relative, from `two`), absolute, and as recorded.
-        let pushedPath = "pushed.html?session=abc&q=ok"
-        let pushed: String
-        let pushedScrubbed: String
-
-        init(base: String) {
-            one = base + "/one.html"
-            two = base + "/two.html"
-            three = base + "/three.html"
-            secret = base + "/secret.html?token=hunter2&q=ok#part"
-            secretScrubbed = base + "/secret.html?token=REDACTED&q=ok"
-            pushed = base + "/" + pushedPath
-            pushedScrubbed = base + "/pushed.html?session=REDACTED&q=ok"
+            try page("secret.html", "Secret \(runId)")
         }
     }
 
@@ -429,7 +423,8 @@ enum E2E {
             bundleUrl.appendingPathComponent("Contents/Resources/own.html").absoluteString
         }
 
-        /// Returns the command's result (`eval`'s), nil if none.
+        /// Returns the command's result (`eval`'s), nil if none. Throws `ScriptError` for a
+        /// script that threw.
         @discardableResult
         func send(_ op: String, _ fields: [String: Any] = [:]) async throws -> Any? {
             let n = next
@@ -443,6 +438,9 @@ enum E2E {
             while Date() < deadline {
                 if let data = try? Data(contentsOf: ack) {
                     let body = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                    if let error = body?["scriptError"] as? String {
+                        throw ScriptError(description: "\(bundleId) \(op): \(error)")
+                    }
                     if let error = body?["error"] as? String {
                         throw E2EError("\(bundleId) \(op): \(error)")
                     }
@@ -454,10 +452,21 @@ enum E2E {
             throw E2EError("\(bundleId) \(op): no answer in 10 s")
         }
 
-        /// Waits up to 2 s for `js`, run in the page of `window`, to be true.
+        /// Waits up to 2 s for `js`, run in the page of `window`, to be true. A script that
+        /// throws (e.g. before the page has what it looks for) counts as false, like in Chrome.
         func waitUntil(window: String, index: Int = 0, _ js: String, _ failure: String) async throws {
             let deadline = Date().addingTimeInterval(2)
-            while try await send("eval", ["id": window, "index": index, "js": js]) as? Bool != true {
+            while true {
+                let isTrue: Bool
+                do {
+                    isTrue = try await send("eval", ["id": window, "index": index, "js": js]) as? Bool == true
+                }
+                catch is ScriptError {
+                    isTrue = false
+                }
+                if isTrue {
+                    return
+                }
                 guard Date() < deadline else {
                     throw E2EError("\(bundleId): \(failure)")
                 }
@@ -491,11 +500,12 @@ enum E2E {
         let c: Target
         let chrome: Chrome?
         /// The pages over HTTP, once the server runs (with Chrome only).
-        private(set) var served: Served?
+        private(set) var served: Pages?
         var steps: [Step] = []
         private var server: PageServer?
         private var trackerPid: pid_t?
-        private var previousFront: URL?
+        /// The app in front before the run, to bring back afterwards.
+        private var previousFront: (pid: pid_t, bundleUrl: URL)?
         /// When the tracker was sent SIGTERM, and when it had exited.
         private var stopSentMs: Int64?
         private var stopDoneMs: Int64?
@@ -526,7 +536,9 @@ enum E2E {
             let apps = try folder("TIMETRACKER_E2E_APPS")
             self.dir = dir
             self.apps = apps
-            pages = try Pages(dir: dir.appendingPathComponent("pages"), runId: id)
+            let pagesDir = dir.appendingPathComponent("pages", isDirectory: true)
+            try Pages.write(to: pagesDir, runId: id)
+            pages = Pages(base: pagesDir.absoluteString)
             func target(_ letter: String, _ bundleId: String) throws -> Target {
                 let control = dir.appendingPathComponent("control-\(letter)")
                 try FileManager.default.createDirectory(at: control, withIntermediateDirectories: true)
@@ -564,12 +576,12 @@ enum E2E {
         }
 
         private func start() async throws {
-            previousFront = try E2E.frontmostBundleUrl()
+            previousFront = try E2E.frontmostApp()
             if chrome != nil {
                 let server = try PageServer(dir: dir.appendingPathComponent("pages"))
                 try await server.start()
                 self.server = server
-                served = Served(base: server.base)
+                served = Pages(base: server.base + "/")
             }
 
             let tracker = NSWorkspace.OpenConfiguration()
@@ -673,21 +685,27 @@ enum E2E {
             a.pid = nil
             b.pid = nil
             c.pid = nil
-            chrome?.kill()
+            // Before bringing back the app in front: if that's the user's Chrome, opening it while
+            // the test's is still quitting could reach the test's instead.
+            await chrome?.quit()
             server?.stop()
             server = nil
-            if let previousFront {
+            // Only if it's still running: opening an app that has quit would launch it again.
+            if let previousFront, kill(previousFront.pid, 0) == 0 {
                 let config = NSWorkspace.OpenConfiguration()
                 config.activates = true
-                _ = try? await NSWorkspace.shared.openApplication(at: previousFront, configuration: config)
+                _ = try? await NSWorkspace.shared.openApplication(at: previousFront.bundleUrl, configuration: config)
             }
         }
 
         func rows() throws -> [Row] {
+            let columns = [
+                "i.start_ms", "i.end_ms", "a.identifier", "a.app_path", "a.name", "t.title", "u.url", "pt.title", "d.path",
+                "r.role", "r.subrole", "i.is_main_window", "i.is_full_screen", "i.is_input_idle", "i.is_screen_locked",
+            ]
             let db = try Database(path: databasePath)
             return try db.query("""
-                SELECT i.start_ms, i.end_ms, a.identifier, a.app_path, a.name, t.title, u.url, pt.title, d.path, r.role, r.subrole,
-                       i.is_main_window, i.is_full_screen, i.is_input_idle, i.is_screen_locked
+                SELECT \(columns.joined(separator: ", "))
                 FROM tracker_interval i
                 LEFT JOIN tracker_app a ON a.id = i.app_id
                 LEFT JOIN tracker_title t ON t.id = i.title_id
@@ -696,11 +714,17 @@ enum E2E {
                 LEFT JOIN tracker_path d ON d.id = i.document_path_id
                 LEFT JOIN tracker_window_role r ON r.id = i.window_role_id
                 ORDER BY i.start_ms
-                """).map { c in
-                Row(
-                    startMs: c[0].int ?? 0, endMs: c[1].int ?? 0, app: c[2].text, appPath: c[3].text, appName: c[4].text,
-                    window: c[5].text, url: c[6].text, page: c[7].text, document: c[8].text, role: c[9].text, subrole: c[10].text,
-                    isMainWindow: c[11].int, isFullScreen: c[12].int, isInputIdle: c[13].int ?? -1, isScreenLocked: c[14].int ?? -1
+                """).map { values in
+                func v(_ column: String) -> SqlValue {
+                    values[columns.firstIndex(of: column)!]
+                }
+                return Row(
+                    startMs: v("i.start_ms").int ?? 0, endMs: v("i.end_ms").int ?? 0,
+                    app: v("a.identifier").text, appPath: v("a.app_path").text, appName: v("a.name").text,
+                    window: v("t.title").text, url: v("u.url").text, page: v("pt.title").text, document: v("d.path").text,
+                    role: v("r.role").text, subrole: v("r.subrole").text,
+                    isMainWindow: v("i.is_main_window").int, isFullScreen: v("i.is_full_screen").int,
+                    isInputIdle: v("i.is_input_idle").int ?? -1, isScreenLocked: v("i.is_screen_locked").int ?? -1
                 )
             }
         }
@@ -723,8 +747,9 @@ enum E2E {
         /// - before that (the changeover), any row that starts is already the step's: the row
         ///   in progress may go on (the previous state, checked by the previous step), but
         ///   nothing in between, such as a page half loaded or an old title with the new URL;
-        /// - a step that changes something doesn't find its row started before it (the change
-        ///   was missed);
+        /// - the first step doesn't find its row started before it (the tracker had recorded the
+        ///   state before, `start`). For a later step that would mean a missed change, which
+        ///   already fails the step before: its own state isn't what was recorded;
         /// - a step that set `expectRowStart(before:)` finds its row started before then.
         ///
         /// Over the run: rows don't overlap or leave gaps, no two rows in a row record the same
@@ -772,9 +797,7 @@ enum E2E {
                 if let before = step.rowStartsBeforeMs, let first = during.first, first.startMs >= before {
                     Issue.record("\(step.name): its row starts at \(t(first.startMs)), expected before \(t(before))")
                 }
-                let isChange = i == 0 || steps[i - 1].expected != step.expected
-                if isChange, let first = during.first, first.asExpected == step.expected, first.startMs < step.sentMs {
-                    // A row started earlier says the change was missed, or recorded too early.
+                if i == 0, let first = during.first, first.asExpected == step.expected, first.startMs < step.sentMs {
                     Issue.record("\(step.name): its row started at \(t(first.startMs)), before the step (\(t(step.sentMs)))")
                 }
             }
@@ -844,11 +867,11 @@ enum E2E {
         return info.split(separator: "=").last.flatMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
 
-    static func frontmostBundleUrl() throws -> URL? {
-        guard let pid = try frontmostPid(), let app = NSRunningApplication(processIdentifier: pid) else {
+    static func frontmostApp() throws -> (pid: pid_t, bundleUrl: URL)? {
+        guard let pid = try frontmostPid(), let url = NSRunningApplication(processIdentifier: pid)?.bundleURL else {
             return nil
         }
-        return app.bundleURL
+        return (pid, url)
     }
 
     static func shell(_ path: String, _ arguments: [String]) throws -> String {

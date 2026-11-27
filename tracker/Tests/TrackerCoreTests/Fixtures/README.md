@@ -14,7 +14,7 @@ To record one, with the app set up as wanted (it needn't be in front):
 
     open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> <output-file> --json
 
-Must run the installed app, for its Accessibility permission. Name the file
+Must run through `open`, as the installed app (or the build copy), for its Accessibility permission. Name the file
 `<app>-<what's shown>.json`, e.g. `chrome-example-page.json`.
 
 Privacy: fixtures hold window titles and page URLs and titles as reported. Record them on

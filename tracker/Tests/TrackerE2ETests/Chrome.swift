@@ -121,19 +121,20 @@ extension E2E {
             }
         }
 
-        /// The script's value; throws if it threw.
+        /// The script's value; throws `ScriptError` if it threw.
         @discardableResult
         func eval(_ tab: Tab, _ js: String) async throws -> Any? {
             let result = try await send("Runtime.evaluate", ["expression": js, "returnByValue": true], tab)
             if let exception = result["exceptionDetails"] as? [String: Any] {
                 let description = (exception["exception"] as? [String: Any])?["description"] as? String
-                throw E2EError("Chrome: \(js): \(description ?? exception["text"] as? String ?? "exception")")
+                throw ScriptError(description: "Chrome: \(js): \(description ?? exception["text"] as? String ?? "exception")")
             }
             return (result["result"] as? [String: Any])?["value"]
         }
 
-        /// Waits up to 5 s for `js` to be true in the tab. A script that fails (the page is
-        /// between documents) counts as false.
+        /// Waits up to 5 s for `js` to be true in the tab. A script that throws, or that Chrome
+        /// refuses to run (the page is between documents), counts as false. Anything else, such
+        /// as a lost connection, fails at once.
         func waitUntil(_ tab: Tab, _ js: String, _ failure: String) async throws {
             let deadline = Date().addingTimeInterval(5)
             while true {
@@ -141,7 +142,10 @@ extension E2E {
                 do {
                     isTrue = try await eval(tab, js) as? Bool == true
                 }
-                catch {
+                catch is ScriptError {
+                    isTrue = false
+                }
+                catch is DevTools.ProtocolError {
                     isTrue = false
                 }
                 if isTrue {
@@ -163,15 +167,35 @@ extension E2E {
             try await waitUntil(tab, "document.visibilityState === 'visible' && document.hasFocus()", "the tab isn't the one shown with focus")
         }
 
-        func kill() {
+        /// Asks Chrome to quit (`Browser.close`), so it takes its helper processes down itself;
+        /// SIGKILL if it's still running after 5 s. Then any process still naming the profile
+        /// in its arguments (helpers do) is stopped too: SIGTERM, then SIGKILL after 2 s.
+        func quit() async {
             if let pid {
-                Darwin.kill(pid, SIGKILL)
+                devTools?.post("Browser.close")
+                let deadline = Date().addingTimeInterval(5)
+                while Darwin.kill(pid, 0) == 0, Date() < deadline {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                if Darwin.kill(pid, 0) == 0 {
+                    Darwin.kill(pid, SIGKILL)
+                }
             }
             pid = nil
             devTools?.close()
             devTools = nil
-            // Its helper processes name the profile in their arguments.
             _ = try? E2E.shell("/usr/bin/pkill", ["-f", profile.path])
+            let deadline = Date().addingTimeInterval(2)
+            while Self.isAnyRunning(profile), Date() < deadline {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            if Self.isAnyRunning(profile) {
+                _ = try? E2E.shell("/usr/bin/pkill", ["-9", "-f", profile.path])
+            }
+        }
+
+        private static func isAnyRunning(_ profile: URL) -> Bool {
+            !((try? E2E.shell("/usr/bin/pgrep", ["-f", profile.path])) ?? "").isEmpty
         }
 
         private func waitUntilLoaded(_ tab: Tab, _ url: String) async throws {
@@ -201,13 +225,25 @@ extension E2E {
         return String(String(decoding: data, as: UTF8.self).dropFirst().dropLast())
     }
 
+    /// A script that threw (`Chrome.eval`).
+    struct ScriptError: Error, CustomStringConvertible {
+        let description: String
+    }
+
     /// The Chrome DevTools Protocol over a WebSocket: commands and their answers. Events are
     /// ignored.
     final class DevTools: @unchecked Sendable {
+        /// Chrome answered a command with an error.
+        struct ProtocolError: Error, CustomStringConvertible {
+            let description: String
+        }
+
         private let task: URLSessionWebSocketTask
         private let lock = NSLock()
         private var next = 1
         private var waiting: [Int: CheckedContinuation<[String: Any], Error>] = [:]
+        /// Why the connection ended, once it has: later commands fail with it at once.
+        private var closedError: Error?
 
         init(url: URL) throws {
             task = URLSession.shared.webSocketTask(with: url)
@@ -226,6 +262,11 @@ extension E2E {
             let text = String(decoding: try JSONSerialization.data(withJSONObject: message), as: UTF8.self)
             return try await withCheckedThrowingContinuation { continuation in
                 lock.lock()
+                if let closedError {
+                    lock.unlock()
+                    continuation.resume(throwing: closedError)
+                    return
+                }
                 waiting[id] = continuation
                 lock.unlock()
                 task.send(.string(text)) { [self] error in
@@ -236,6 +277,14 @@ extension E2E {
                 DispatchQueue.global().asyncAfter(deadline: .now() + 10) { [self] in
                     finish(id, .failure(E2EError("DevTools \(method): no answer in 10 s")))
                 }
+            }
+        }
+
+        /// Sends a command without waiting for its answer, for one that may end the connection.
+        func post(_ method: String) {
+            let message: [String: Any] = ["id": nextId(), "method": method, "params": [:] as [String: Any]]
+            if let data = try? JSONSerialization.data(withJSONObject: message) {
+                task.send(.string(String(decoding: data, as: UTF8.self))) { _ in }
             }
         }
 
@@ -268,6 +317,7 @@ extension E2E {
                 switch result {
                 case .failure(let error):
                     lock.lock()
+                    closedError = E2EError("DevTools: connection lost: \(error)")
                     let all = waiting
                     waiting = [:]
                     lock.unlock()
@@ -279,7 +329,7 @@ extension E2E {
                        let body = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
                        let id = body["id"] as? Int {
                         if let error = body["error"] as? [String: Any] {
-                            finish(id, .failure(E2EError("DevTools: \(error["message"] as? String ?? "\(error)")")))
+                            finish(id, .failure(ProtocolError(description: "DevTools: \(error["message"] as? String ?? "\(error)")")))
                         }
                         else {
                             finish(id, .success(body["result"] as? [String: Any] ?? [:]))
@@ -308,6 +358,8 @@ extension E2E {
             listener = try NWListener(using: parameters)
         }
 
+        /// Fails if the listener isn't ready within 5 s, or stops or waits (for a network that
+        /// isn't there) before.
         func start() async throws {
             listener.newConnectionHandler = { [self] connection in
                 serve(connection)
@@ -315,11 +367,18 @@ extension E2E {
             listener.stateUpdateHandler = { [self] state in
                 switch state {
                 case .ready:
-                    whenReady?.resume(returning: listener.port?.rawValue ?? 0)
-                    whenReady = nil
+                    if let port = listener.port?.rawValue, port != 0 {
+                        finishStart(.success(port))
+                    }
+                    else {
+                        finishStart(.failure(E2EError("page server: ready without a port")))
+                    }
                 case .failed(let error):
-                    whenReady?.resume(throwing: error)
-                    whenReady = nil
+                    finishStart(.failure(E2EError("page server: \(error)")))
+                case .waiting(let error):
+                    finishStart(.failure(E2EError("page server: waiting: \(error)")))
+                case .cancelled:
+                    finishStart(.failure(E2EError("page server: cancelled before it was ready")))
                 default:
                     break
                 }
@@ -328,9 +387,24 @@ extension E2E {
                 queue.async { [self] in
                     whenReady = continuation
                     listener.start(queue: queue)
+                    queue.asyncAfter(deadline: .now() + 5) { [self] in
+                        finishStart(.failure(E2EError("page server: not ready in 5 s")))
+                    }
                 }
             }
             base = "http://127.0.0.1:\(port)"
+        }
+
+        /// On `queue`. Only the first call counts; a failure also stops the listener.
+        private func finishStart(_ result: Result<UInt16, Error>) {
+            guard let whenReady else {
+                return
+            }
+            self.whenReady = nil
+            if case .failure = result {
+                listener.cancel()
+            }
+            whenReady.resume(with: result)
         }
 
         func stop() {
