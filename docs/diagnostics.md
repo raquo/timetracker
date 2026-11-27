@@ -7,6 +7,7 @@ How we find out what an app exposes to the tracker, and how what we find becomes
 - `TimeTracker --dump-ax <bundle-id> <output-file>` writes what a running app's windows expose, and what the tracker's page search finds in them, to a text file.
 - With `--json` at the end, it saves the app's focused window as a fixture instead: a JSON file in `tracker/Tests/TrackerCoreTests/Fixtures/ax/`.
 - `swift test` replays every fixture and checks what the tracker would record from it.
+- `TimeTracker --watch-ax <bundle-id> <output-file> <seconds>` logs which Accessibility notifications a running app sends, and when its focused page changes, to a text file as they happen.
 
 How to run the dump tool: [tracker/README.md](../tracker/README.md#page-url-and-title-from-app-web-content).
 
@@ -24,6 +25,16 @@ How to run the dump tool: [tracker/README.md](../tracker/README.md#page-url-and-
 4. **The focused window's whole tree,** one element per line, indented by depth: role, subrole, title, description, value, DOM id, URL. Web areas also list every attribute they have, since one might hold what the URL doesn't. Values are cut at 80 characters, newlines shown as `⏎`; the walk stops at depth 60 or 8,000 elements.
 
 Errors (no running app with that bundle ID, no focused window) are written to the same file.
+
+## The watch tool
+
+**Finds out which events the tracker could listen for** in an app: which Accessibility notifications it sends when something changes, and for which elements. Run like the dump tool, as the installed app or the build copy (`open -n -W … --args --watch-ax <bundle-id> /tmp/watch.txt 20`), and make the changes while it runs. Code: `AxWatch`.
+
+- **Each notification is registered three times:** on the app element, on the focused window, and on the focused window's web area (moved along when either changes). Each line says which one it came through, since an app needn't deliver a notification to every registration. Notifications the app element refuses are logged at the start.
+- **The focused page is polled every 100 ms,** and a line is written when its URL or title changes, or it's a new element. That shows a change the app sent no notification for, and when a navigation replaces the page element (notifications registered on the old one stop).
+- Lines are in ms since the start. Titles and URLs are written as they are, unscrubbed: the file is for a look on this machine.
+
+Found with it: WebKit sends nothing for a page title change or a URL change without a load ([page-reading.md](page-reading.md#background)).
 
 ## Accessibility fixtures
 

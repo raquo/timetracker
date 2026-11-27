@@ -6,19 +6,30 @@ import os
 ///
 /// - `TimeTracker`: track, into `databasePath()`.
 /// - `TimeTracker --dump-ax <bundle-id> <output-file> [--json]`: see `AxDump`.
+/// - `TimeTracker --watch-ax <bundle-id> <output-file> <seconds>`: see `AxWatch`.
 public enum TrackerMain {
     enum Command: Equatable {
         case track
         case dumpAx(bundleId: String, outputPath: String, format: AxDump.Format)
-        /// `--dump-ax` with the wrong arguments.
+        case watchAx(bundleId: String, outputPath: String, seconds: Double)
+        /// `--dump-ax` or `--watch-ax` with the wrong arguments.
         case usageError
     }
 
-    static let usage = "usage: TimeTracker [--dump-ax <bundle-id> <output-file> [--json]]"
+    static let usage = "usage: TimeTracker [--dump-ax <bundle-id> <output-file> [--json] | --watch-ax <bundle-id> <output-file> <seconds>]"
 
     /// Other arguments are ignored: macOS and Xcode may add their own (`-NSDocumentRevisionsDebugMode YES`).
     static func command(arguments: [String]) -> Command {
-        guard arguments.count >= 2, arguments[1] == "--dump-ax" else {
+        guard arguments.count >= 2 else {
+            return .track
+        }
+        if arguments[1] == "--watch-ax" {
+            guard arguments.count == 5, let seconds = Double(arguments[4]), seconds > 0 else {
+                return .usageError
+            }
+            return .watchAx(bundleId: arguments[2], outputPath: arguments[3], seconds: seconds)
+        }
+        guard arguments[1] == "--dump-ax" else {
             return .track
         }
         if arguments.count == 4 {
@@ -38,6 +49,8 @@ public enum TrackerMain {
             break
         case .dumpAx(let bundleId, let outputPath, let format):
             exit(AxDump.run(bundleId: bundleId, outputPath: outputPath, format: format))
+        case .watchAx(let bundleId, let outputPath, let seconds):
+            exit(AxWatch.run(bundleId: bundleId, outputPath: outputPath, seconds: seconds))
         case .usageError:
             // Not tracking instead: the mistake would go unnoticed.
             FileHandle.standardError.write(Data("\(usage)\n".utf8))

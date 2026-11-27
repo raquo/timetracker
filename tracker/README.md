@@ -48,7 +48,7 @@ INSERT OR REPLACE INTO app_page_reading_choice VALUES (0, 'md.obsidian', 2, NULL
 SQL
 ```
 
-To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> /tmp/ax.txt`. With `--json` after the output file, it instead records the focused window as a test fixture (see `tracker/Tests/TrackerCoreTests/Fixtures/README.md`). What it writes, and how to check a new app with it: [docs/diagnostics.md](../docs/diagnostics.md).
+To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> /tmp/ax.txt`. With `--json` after the output file, it instead records the focused window as a test fixture (see `tracker/Tests/TrackerCoreTests/Fixtures/README.md`). What it writes, and how to check a new app with it: [docs/diagnostics.md](../docs/diagnostics.md). To see which Accessibility notifications an app sends as things change: `--watch-ax <bundle-id> /tmp/watch.txt <seconds>`, same doc.
 
 ## Code layout
 
@@ -61,7 +61,7 @@ To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --arg
   - `Accessibility/`: `AXUIElement` reads and the `AccessibilityNode` protocol, change notifications (`WindowObserver`), switching Electron trees on.
   - `Storage/`: SQLite wrapper, schema migrations, lookup tables.
   - `Privacy/`: `UrlScrubber`.
-  - `Apps/`: app-specific code (`Claude.swift`; `Browsers.swift`, not used yet). `Diagnostics/`: the `--dump-ax` tool.
+  - `Apps/`: app-specific code (`Claude.swift`; `Browsers.swift`, not used yet). `Diagnostics/`: the `--dump-ax` and `--watch-ax` tools.
 - `Tests/TrackerCoreTests/`: `swift test` (Swift Testing; works with the Command Line Tools, no Xcode needed).
   `Support/` holds a temporary migrated database and harnesses that drive `Recorder` (directly, or through `Settler` like `Tracker.tick`) and `PageReadingPolicy` (like `Sampler`) with times relative to `t0`. Tests compare whole stored rows, read back with lookups resolved, and every read checks that rows never overlap. `RecorderHarness.closeInterval` takes a last sample before closing, like `Tracker.closeInterval`. `FakeNode` is a hand-built Accessibility element, so `PageSearch` runs without a live app. Failed writes are simulated with a TEMP trigger that raises an error (`TempDatabase.failWrites`), so no mocks. Use `withKnownIssue` to pin a known gap (stating the wanted result), so fixing it shows up as a test to update.
 - `Sources/E2ETarget/`, `Tests/TrackerE2ETests/`: the end-to-end test, run by `scripts/e2e.sh` (skipped by a plain `swift test`). See [docs/end-to-end-tests.md](../docs/end-to-end-tests.md).

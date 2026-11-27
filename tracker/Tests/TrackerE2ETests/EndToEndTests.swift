@@ -37,8 +37,13 @@ struct EndToEndTests {
         try await run.step("navigate", expect: .init(app: a, window: "Web \(r)", url: pages.two, page: "Two \(r)")) {
             try await a.send("navigate", ["id": "web", "url": pages.two])
         }
-        try await run.step("page renames itself", expect: .init(app: a, window: "Web \(r)", url: pages.two, page: "Two renamed \(r)")) {
-            try await a.send("eval", ["id": "web", "js": "document.title = 'Two renamed \(r)'"])
+        // The fragment isn't recorded (docs/url-scrubbing.md), so nothing changes. Not tested: the
+        // page renaming itself or changing its URL without a load (`history.pushState`). WebKit
+        // sends no event for those, so they're recorded at the next 5 s poll, which a 2.5 s step
+        // can't wait for (docs/page-reading.md#limitations).
+        try await run.step("hash change", expect: .init(app: a, window: "Web \(r)", url: pages.two, page: "Two \(r)")) {
+            try await a.send("eval", ["id": "web", "js": "location.hash = 'part'"])
+            try await a.waitUntil(window: "web", "location.hash === '#part'", "the hash didn't change")
         }
         try await run.step(
             "secret in URL",

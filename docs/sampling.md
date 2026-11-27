@@ -58,7 +58,7 @@ A boundary is recorded when the change is noticed, which is after it happened:
 
 - after an Accessibility event: ~300 ms;
 - after a click: 600 ms;
-- with neither (a URL that changes without a title change, input resuming after idle): up to the 5 s poll.
+- with neither (a URL that changes without a load or title change, a page title change in WebKit, input resuming after idle): up to the 5 s poll. Which page changes send no events: [page-reading.md](page-reading.md#limitations).
 
 Settling records from the first sighting, so it adds nothing here. The poll interval bounds the worst case, which is why it shouldn't be raised lightly.
 

@@ -22,7 +22,9 @@ The real tracker records into a temporary database while a test drives a small a
 
 **Steps check their own premise** before they count: where a step moves keyboard focus, the test asks the pages (`document.hasFocus()`, the iframe's `activeElement`) that focus is where the step says, and fails otherwise. Without that, a step whose action silently did nothing would pass whenever the tracker kept recording the previous state.
 
-**Steps** are held 2.5 s each. Currently: a plain window; a web page; navigating; the page renaming itself; a URL with a secret (`?token=` and a fragment, recorded scrubbed); renaming the window; another window; another app and back; two pages side by side with focus in neither, then each; a page with an iframe, with focus inside the iframe (still the outer page). The iframe is `srcdoc`, so it shares the outer page's origin: a script can't move focus into another origin's frame without a click, and each `file://` page is its own origin.
+**Steps** are held 2.5 s each. Currently: a plain window; a web page; navigating; changing only the fragment (not recorded, so no change); a URL with a secret (`?token=` and a fragment, recorded scrubbed); renaming the window; another window; another app and back; two pages side by side with focus in neither, then each; a page with an iframe, with focus inside the iframe (still the outer page). The iframe is `srcdoc`, so it shares the outer page's origin: a script can't move focus into another origin's frame without a click, and each `file://` page is its own origin.
+
+**Not stepped through:** the page renaming itself, or changing its URL without a load (`history.pushState`, going back across one). WebKit sends no event for those, so the tracker records them at its next 5 s poll ([page-reading.md](page-reading.md#limitations)), which a 2.5 s step can't count on. Found with steps for them, which passed only when the poll happened to come right after.
 
 ## What's checked
 
