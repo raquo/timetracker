@@ -21,7 +21,7 @@ Events, with a slow poll as a backstop. Code: `Tracker`, `WindowObserver`.
 | Where pages are read, also: keyboard focus moved (`AXFocusedUIElementChanged`), the page's title changed, a page finished loading (`AXLoadComplete`, app-wide) | same | apps whose window title stays the same while the page changes (Claude switching conversations) |
 | Any left click, anywhere (`leftMouseUp`) | 600 ms after the first click (see below) | changes that send no Accessibility event; the delay gives the app time to react to the click |
 | Lock, unlock, wake | at once | see [idle-and-away.md](idle-and-away.md) |
-| Poll | every 5 s | everything else: URL-only changes, going idle and back, [presence signals](idle-and-away.md#presence-signals) (read only then, and on wake, lock and unlock) |
+| Poll | every 5 s | everything else: URL-only changes, going idle and back, [presence signals](idle-and-away.md#presence-signals) (read only then and on a few events, see there) |
 | A probe of the frontmost app's window comes due ([page-reading.md](page-reading.md#probing)) | when due | pages of an app not decided on yet, in a tree that was still empty at the previous probe |
 | SIGUSR1 | at once | nothing in normal use: for the [end-to-end test](end-to-end-tests.md) |
 

@@ -40,6 +40,7 @@ Signals that the user may be at the Mac without touching it (a video, a call), s
 
 - **Holders** are `tracker_app` rows, like the frontmost app. Helper processes are recorded as themselves (`com.apple.WebKit.GPU` for Safari); their `app_path` shows the app they belong to.
 - **Read on the poll** (every 5 s), and on wake, lock and unlock; other samples reuse the last read. NULL while the screen is locked or a read fails. Code: `Tracker.refreshPresence()`.
+- **Settled like any change:** a read that differs from the one before is read again by the next sample (the [settling](sampling.md#settling) re-sample, ~400 ms later), so a read that failed once, or a hold gone by then, isn't recorded. This extra read happens only when presence changed.
 - **Mic shortcut:** while no device that has an input is running (`kAudioDevicePropertyDeviceIsRunningSomewhere`), the mic holders are `[]` without listing processes. Only a shortcut: "running" covers output too, so a headset playing sound, or Krisp, keeps it from applying.
 - **Cost** (macOS 15.6, CPU including the daemons that answer): display sleep holders ~1.1 ms (mostly `powerd`), the mic shortcut's device check ~1.7 ms (mostly `coreaudiod`), the camera ~0.04 ms. Listing mic holders ~14 ms with 35 audio processes (~2 ms ours, ~12 ms `coreaudiod`), one round trip per process, so it grows with the number of apps using audio; the list includes every process that has connected to CoreAudio, mostly idle. Per poll: ~3 ms, or ~17 ms when the shortcut doesn't apply, 0.06% to 0.35% of one core. No permission needed: nothing opens a device.
 
@@ -66,7 +67,7 @@ The away rule isn't built yet (the server isn't). The planned first version is i
 ## Limitations
 
 - **Backdating reaches only into the open row.** If a row closed after the last input (a window title changed while the user was away), the rows before that change stay not idle, so the stretch looks shorter ([record-consistency.md](record-consistency.md), #5).
-- **Presence changes are up to 5 s late** (the poll), and a hold that starts and ends between two polls (a few seconds of dictation) isn't seen. One a poll catches lasts at least until the next poll.
+- **Presence changes are up to 5 s late** (the poll), and a hold that starts and ends between two polls (a few seconds of dictation) isn't seen. One a poll catches and the confirming read still sees lasts at least until the next poll.
 - **The camera has no info on holders,** so a camera held by an app all day can't be told apart from a call.
 - **Not yet checked with real calls and videos:** which names browsers and call apps give their assertions, whether call apps keep the mic running while muted, and whether any name contains page or media titles (which would need scrubbing). Checklist in [PLAN.md](../notes/PLAN.md).
 - **Fast user switching isn't handled.** While another macOS user is active, the tracker keeps sampling, and that time is recorded as idle in whatever app was frontmost.

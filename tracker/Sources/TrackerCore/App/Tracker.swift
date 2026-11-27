@@ -49,6 +49,9 @@ final class Tracker {
     private var isAxTrusted: Bool?
     /// As of the last read (see `refreshPresence()`).
     private var presence = PresenceSignals()
+    /// The last read differed from the one before, so the next sample reads again to confirm it
+    /// (see `refreshPresence()`).
+    private var isPresenceUnconfirmed = false
     private var scheduledTicks: Set<DelayedTick> = []
     /// The sample for the frontmost app's next probe, and when it's due.
     private var probeTick: (atMs: Int64, work: DispatchWorkItem)?
@@ -148,12 +151,13 @@ final class Tracker {
         log.info("Tracker started")
     }
 
-    /// `refreshingPresence`: read the presence signals again first; otherwise the last read is reused.
+    /// `refreshingPresence`: read the presence signals again first; otherwise the last read is
+    /// reused, unless it's unconfirmed.
     private func tick(refreshingPresence: Bool = false) {
         guard !isAsleep else {
             return
         }
-        if refreshingPresence {
+        if refreshingPresence || isPresenceUnconfirmed {
             refreshPresence()
         }
         let isAxTrusted = checkAccessibility()
@@ -185,9 +189,14 @@ final class Tracker {
 
     /// Reads the presence signals, or clears them while the screen is locked (they're recorded as
     /// NULL then). Only on the poll (which also fires at start), wake, lock, unlock and SIGUSR1:
-    /// other samples reuse the last read, so a value is at most one poll old.
+    /// other samples reuse the last read, so a value is at most one poll old. A read that differs
+    /// from the one before is read again by the next sample (the settle re-sample, at the latest
+    /// the next poll), so settling confirms it like any other change: a failed read or a hold
+    /// that's gone by then reverts before it's recorded.
     private func refreshPresence() {
-        presence = isScreenLocked ? PresenceSignals() : PresenceReader.read()
+        let read = isScreenLocked ? PresenceSignals() : PresenceReader.read()
+        isPresenceUnconfirmed = read != presence
+        presence = read
     }
 
     /// Ticks after `kind`'s delay. Further requests of the same kind until then are absorbed by it.
