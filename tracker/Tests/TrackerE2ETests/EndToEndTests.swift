@@ -4,14 +4,16 @@ import Testing
 @testable import TrackerCore
 
 /// The real tracker (the build copy, which holds the Accessibility permission) recording into a
-/// temporary database while the test drives two copies of `E2ETarget`; then the rows are
-/// checked against what each step showed. Takes over the screen for about 45 s.
+/// temporary database while the test drives two copies of `E2ETarget`, then a throwaway Google
+/// Chrome; then the rows are checked against what each step showed. Takes over the screen for
+/// about 80 s.
 ///
 /// Run by scripts/e2e.sh, which builds the apps, makes the run folder, and cleans up after a
 /// crash. Skipped otherwise. Environment:
 /// - `TIMETRACKER_E2E_TRACKER`: the tracker app to run;
 /// - `TIMETRACKER_E2E_APPS`: folder holding the two target apps;
-/// - `TIMETRACKER_E2E_RUN`: an empty folder for this run (database, pages, command files).
+/// - `TIMETRACKER_E2E_RUN`: an empty folder for this run (database, pages, command files);
+/// - `TIMETRACKER_E2E_CHROME`: the Chrome app to drive. Empty or not set: Chrome's steps are skipped.
 @Suite(.serialized, .enabled(if: E2E.isEnabled, "run by scripts/e2e.sh"))
 struct EndToEndTests {
     @Test func recordsWhatIsOnScreen() async throws {
@@ -95,6 +97,80 @@ struct EndToEndTests {
         try await run.step("plain window again", expect: .init(app: a, window: "Plain \(r)")) {
             try await a.send("focusWindow", ["id": "plain"])
         }
+        try await chromeSteps(run)
+    }
+
+    /// Chrome reports the shown tab's URL as the window's document too, so `document` is the
+    /// page URL, scrubbed the same way (docs/url-scrubbing.md).
+    private static func chromeSteps(_ run: E2E.Run) async throws {
+        guard let chrome = run.chrome, let web = run.served else {
+            print("e2e: no Chrome given (TIMETRACKER_E2E_CHROME), its steps skipped")
+            return
+        }
+        let r = run.id
+        func shows(_ title: String, _ url: String) -> E2E.Expected {
+            E2E.Expected(app: chrome.app, window: title + E2E.Chrome.windowSuffix, url: url, page: title, document: url)
+        }
+
+        var first: E2E.Chrome.Tab!
+        try await run.step("Chrome", expect: shows("One \(r)", web.one)) {
+            first = try await chrome.launch(web.one)
+            try await chrome.expectFocus(first)
+        }
+        try await run.step("Chrome: navigate", expect: shows("Two \(r)", web.two)) {
+            try await chrome.navigate(first, web.two)
+        }
+        // Chrome renames the window after the tab, which the tracker hears (`AXTitleChanged`).
+        try await run.step("Chrome: page renames itself", expect: shows("Two renamed \(r)", web.two)) {
+            try await chrome.eval(first, "document.title = \(E2E.jsString("Two renamed \(r)"))")
+            try await chrome.waitUntil(first, "document.title === \(E2E.jsString("Two renamed \(r)"))", "the title didn't change")
+        }
+        // A new URL without a load, with a secret: scrubbed in the page URL and the document. With
+        // a title change, which is what triggers the sample: Chrome sends nothing for `pushState`
+        // alone (and updates the page's URL only with the next change), so that would wait for the
+        // 5 s poll (docs/page-reading.md#limitations).
+        try await run.step("Chrome: pushState and title", expect: shows("Pushed \(r)", web.pushedScrubbed)) {
+            try await chrome.eval(first, "history.pushState(null, '', \(E2E.jsString(web.pushedPath))); document.title = \(E2E.jsString("Pushed \(r)"))")
+            try await chrome.waitUntil(first, "location.href === \(E2E.jsString(web.pushed))", "pushState didn't change the URL")
+        }
+        // The fragment isn't recorded, so nothing changes.
+        try await run.step("Chrome: hash change", expect: shows("Pushed \(r)", web.pushedScrubbed)) {
+            try await chrome.eval(first, "location.hash = 'part'")
+            try await chrome.waitUntil(first, "location.hash === '#part'", "the hash didn't change")
+        }
+        try await run.step("Chrome: secret in URL", expect: shows("Secret \(r)", web.secretScrubbed)) {
+            try await chrome.navigate(first, web.secret)
+        }
+        var second: E2E.Chrome.Tab!
+        try await run.step("Chrome: new tab", expect: shows("Three \(r)", web.three)) {
+            second = try await chrome.open(web.three)
+            try await chrome.expectFocus(second)
+        }
+        try await run.step("Chrome: first tab", expect: shows("Secret \(r)", web.secretScrubbed)) {
+            try await chrome.activate(first)
+            try await chrome.expectFocus(first)
+            try await chrome.waitUntil(second, "document.visibilityState === 'hidden'", "the second tab is still shown")
+        }
+        var window: E2E.Chrome.Tab!
+        try await run.step("Chrome: new window", expect: shows("One \(r)", web.one)) {
+            window = try await chrome.open(web.one, isNewWindow: true)
+            try await chrome.expectFocus(window)
+        }
+        try await run.step("Chrome: window closed", expect: shows("Secret \(r)", web.secretScrubbed)) {
+            try await chrome.close(window)
+            try await chrome.expectFocus(first)
+        }
+        // Browsers' own pages are content too (docs/page-reading.md).
+        try await run.step("Chrome: own page", expect: shows("About Version", "chrome://version/")) {
+            try await chrome.navigate(first, "chrome://version/")
+        }
+        try await run.step("Chrome: other app", expect: .init(app: run.b, window: "Bee \(r)", url: run.pages.bee, page: "Bee page \(r)")) {
+            try await run.activate(run.b)
+        }
+        try await run.step("Chrome: back", expect: shows("About Version", "chrome://version/")) {
+            try await chrome.bringToFront(first)
+            try await chrome.expectFocus(first)
+        }
     }
 }
 
@@ -110,28 +186,37 @@ enum E2E {
 
     static let targetIds = ["com.raquo.timetracker.e2e-target-a", "com.raquo.timetracker.e2e-target-b"]
 
+    /// An app as the tracker records it (`tracker_app`): bundle ID and install path.
+    struct App: Equatable {
+        let bundleId: String
+        let path: String
+    }
+
     /// What a step should be recorded as. Everything else is checked too: a standard main
-    /// window, no document, not locked. Except input idle, which depends on when someone last
-    /// touched the mouse or keyboard (see `Run.check`).
+    /// window, not full screen, not locked. Except input idle, which depends on when someone
+    /// last touched the mouse or keyboard (see `Run.check`).
     struct Expected: Equatable, CustomStringConvertible {
-        var app: String
+        var app: App
         var window: String
-        var url: String? = nil
-        var page: String? = nil
+        var url: String?
+        var page: String?
+        /// The window's document (`AXDocument`): none in the test app's windows.
+        var document: String?
 
         init(app: Target, window: String, url: String? = nil, page: String? = nil) {
-            self.init(bundleId: app.bundleId, window: window, url: url, page: page)
+            self.init(app: app.app, window: window, url: url, page: page, document: nil)
         }
 
-        init(bundleId: String, window: String, url: String?, page: String?) {
-            self.app = bundleId
+        init(app: App, window: String, url: String?, page: String?, document: String?) {
+            self.app = app
             self.window = window
             self.url = url
             self.page = page
+            self.document = document
         }
 
         var description: String {
-            "\(app) | \(window) | \(url ?? "no URL") | \(page ?? "no page title")"
+            "\(app.bundleId) | \(window) | \(url ?? "no URL") | \(page ?? "no page title") | \(document.map { "document \($0)" } ?? "no document")"
         }
     }
 
@@ -148,6 +233,7 @@ enum E2E {
         let startMs: Int64
         let endMs: Int64
         let app: String?
+        let appPath: String?
         let window: String?
         let url: String?
         let page: String?
@@ -155,6 +241,7 @@ enum E2E {
         let role: String?
         let subrole: String?
         let isMainWindow: Int64?
+        let isFullScreen: Int64?
         let isInputIdle: Int64
         let isScreenLocked: Int64
 
@@ -162,7 +249,7 @@ enum E2E {
             guard let app, let window else {
                 return nil
             }
-            return Expected(bundleId: app, window: window, url: url, page: page)
+            return Expected(app: App(bundleId: app, path: appPath ?? ""), window: window, url: url, page: page, document: document)
         }
 
         /// What else must hold for every row of a step.
@@ -174,8 +261,8 @@ enum E2E {
             if isMainWindow != 1 {
                 p.append("is_main_window \(isMainWindow.map(String.init) ?? "nil")")
             }
-            if document != nil {
-                p.append("document \(document!)")
+            if isFullScreen != 0 {
+                p.append("is_full_screen \(isFullScreen.map(String.init) ?? "nil")")
             }
             if isScreenLocked != 0 {
                 p.append("screen locked")
@@ -183,8 +270,13 @@ enum E2E {
             return p
         }
 
+        /// Everything recorded: two rows in a row with the same are a split for nothing.
+        var content: String {
+            "\(description) | \(appPath ?? "no path") | \(role ?? "-")/\(subrole ?? "-") | main \(isMainWindow.map(String.init) ?? "nil") | full screen \(isFullScreen.map(String.init) ?? "nil") | idle \(isInputIdle) | locked \(isScreenLocked)"
+        }
+
         var description: String {
-            "\(app ?? "no app") | \(window ?? "no title") | \(url ?? "no URL") | \(page ?? "no page title")"
+            "\(app ?? "no app") | \(window ?? "no title") | \(url ?? "no URL") | \(page ?? "no page title") | \(document.map { "document \($0)" } ?? "no document")"
         }
     }
 
@@ -196,6 +288,7 @@ enum E2E {
         let secretScrubbed: String
         let bee: String
         let frame: String
+        let three: String
 
         init(dir: URL, runId: String) throws {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -215,6 +308,30 @@ enum E2E {
             // (a script can't focus into another origin's frame without a click; each file:// page
             // is its own origin).
             frame = try page("frame.html", "Frame \(runId)", "<iframe srcdoc=\"<input id=i>\" width=600 height=200></iframe>")
+            three = try page("three.html", "Three \(runId)")
+        }
+    }
+
+    /// The same pages served over HTTP (`PageServer`), for Chrome.
+    struct Served {
+        let one: String
+        let two: String
+        let three: String
+        let secret: String
+        let secretScrubbed: String
+        /// Where `pushState` goes (relative, from `two`), absolute, and as recorded.
+        let pushedPath = "pushed.html?session=abc&q=ok"
+        let pushed: String
+        let pushedScrubbed: String
+
+        init(base: String) {
+            one = base + "/one.html"
+            two = base + "/two.html"
+            three = base + "/three.html"
+            secret = base + "/secret.html?token=hunter2&q=ok#part"
+            secretScrubbed = base + "/secret.html?token=REDACTED&q=ok"
+            pushed = base + "/" + pushedPath
+            pushedScrubbed = base + "/pushed.html?session=REDACTED&q=ok"
         }
     }
 
@@ -230,6 +347,10 @@ enum E2E {
             self.bundleId = bundleId
             self.bundleUrl = bundleUrl
             self.controlDir = controlDir
+        }
+
+        var app: App {
+            App(bundleId: bundleId, path: bundleUrl?.path ?? "")
         }
 
         /// Returns the command's result (`eval`'s), nil if none.
@@ -292,9 +413,16 @@ enum E2E {
         let pages: Pages
         let a: Target
         let b: Target
+        let chrome: Chrome?
+        /// The pages over HTTP, once the server runs (with Chrome only).
+        private(set) var served: Served?
         var steps: [Step] = []
+        private var server: PageServer?
         private var trackerPid: pid_t?
         private var previousFront: URL?
+        /// When the tracker was sent SIGTERM, and when it had exited.
+        private var stopSentMs: Int64?
+        private var stopDoneMs: Int64?
 
         var databasePath: String {
             dir.appendingPathComponent("tracker.db").path
@@ -314,6 +442,12 @@ enum E2E {
             }
             a = try target("a", E2E.targetIds[0])
             b = try target("b", E2E.targetIds[1])
+            if let path = E2E.environment["TIMETRACKER_E2E_CHROME"], !path.isEmpty {
+                chrome = Chrome(appUrl: URL(fileURLWithPath: path), profile: dir.appendingPathComponent("chrome-profile"))
+            }
+            else {
+                chrome = nil
+            }
         }
 
         /// Starts the tracker and the target apps, runs `body`, stops the tracker. Cleans up
@@ -333,6 +467,12 @@ enum E2E {
 
         private func start() async throws {
             previousFront = try E2E.frontmostBundleUrl()
+            if chrome != nil {
+                let server = try PageServer(dir: dir.appendingPathComponent("pages"))
+                try await server.start()
+                self.server = server
+                served = Served(base: server.base)
+            }
 
             let tracker = NSWorkspace.OpenConfiguration()
             tracker.createsNewApplicationInstance = true
@@ -397,14 +537,16 @@ enum E2E {
             guard let pid = trackerPid else {
                 return
             }
+            stopSentMs = nowMs()
             kill(pid, SIGTERM)
             let deadline = Date().addingTimeInterval(5)
             while kill(pid, 0) == 0 {
                 guard Date() < deadline else {
                     throw E2EError("the tracker didn't exit after SIGTERM")
                 }
-                try await Task.sleep(for: .milliseconds(50))
+                try await Task.sleep(for: .milliseconds(20))
             }
+            stopDoneMs = nowMs()
             trackerPid = nil
         }
 
@@ -417,6 +559,9 @@ enum E2E {
             trackerPid = nil
             a.pid = nil
             b.pid = nil
+            chrome?.kill()
+            server?.stop()
+            server = nil
             if let previousFront {
                 let config = NSWorkspace.OpenConfiguration()
                 config.activates = true
@@ -427,8 +572,8 @@ enum E2E {
         func rows() throws -> [Row] {
             let db = try Database(path: databasePath)
             return try db.query("""
-                SELECT i.start_ms, i.end_ms, a.identifier, t.title, u.url, pt.title, d.path, r.role, r.subrole,
-                       i.is_main_window, i.is_input_idle, i.is_screen_locked
+                SELECT i.start_ms, i.end_ms, a.identifier, a.app_path, t.title, u.url, pt.title, d.path, r.role, r.subrole,
+                       i.is_main_window, i.is_full_screen, i.is_input_idle, i.is_screen_locked
                 FROM tracker_interval i
                 LEFT JOIN tracker_app a ON a.id = i.app_id
                 LEFT JOIN tracker_title t ON t.id = i.title_id
@@ -439,16 +584,38 @@ enum E2E {
                 ORDER BY i.start_ms
                 """).map { c in
                 Row(
-                    startMs: c[0].int ?? 0, endMs: c[1].int ?? 0, app: c[2].text, window: c[3].text, url: c[4].text,
-                    page: c[5].text, document: c[6].text, role: c[7].text, subrole: c[8].text,
-                    isMainWindow: c[9].int, isInputIdle: c[10].int ?? -1, isScreenLocked: c[11].int ?? -1
+                    startMs: c[0].int ?? 0, endMs: c[1].int ?? 0, app: c[2].text, appPath: c[3].text, window: c[4].text,
+                    url: c[5].text, page: c[6].text, document: c[7].text, role: c[8].text, subrole: c[9].text,
+                    isMainWindow: c[10].int, isFullScreen: c[11].int, isInputIdle: c[12].int ?? -1, isScreenLocked: c[13].int ?? -1
                 )
             }
         }
 
-        /// Per step: from `latencyMs` after it was done until the next one, every row matches
-        /// what it showed, and its row didn't start before it was sent. Rows during the run
-        /// don't overlap or leave gaps.
+        /// What the tracker decided about each app's pages (`tracker_app_page_probe`), by bundle ID.
+        func pageProbes() throws -> [String: (hasContentPages: Int64?, decidedAtMs: Int64?, probeCount: Int64)] {
+            let db = try Database(path: databasePath)
+            var probes: [String: (hasContentPages: Int64?, decidedAtMs: Int64?, probeCount: Int64)] = [:]
+            for c in try db.query("SELECT identifier, has_content_pages, decided_at_ms, probe_count FROM tracker_app_page_probe WHERE identifier_type = 0") {
+                if let id = c[0].text {
+                    probes[id] = (c[1].int, c[2].int, c[3].int ?? 0)
+                }
+            }
+            return probes
+        }
+
+        /// Per step:
+        /// - from `latencyMs` after it was done until the next one, every row matches what it
+        ///   showed;
+        /// - before that (the changeover), any row that starts is already the step's: the row
+        ///   in progress may go on (the previous state, checked by the previous step), but
+        ///   nothing in between, such as a page half loaded or an old title with the new URL;
+        /// - a step that changes something doesn't find its row started before it (the change
+        ///   was missed).
+        ///
+        /// Over the run: rows don't overlap or leave gaps, no two rows in a row record the same
+        /// (a split for nothing), and the last row ends when the tracker was stopped. Each app's
+        /// page reading mode was decided on (`tracker_app_page_probe`) at its first step with a
+        /// page.
         ///
         /// Input idle isn't checked: the test makes no input, so once a minute has passed since
         /// the last real input the run goes idle (and back, if someone moves the mouse).
@@ -465,9 +632,9 @@ enum E2E {
             for row in rows where row.endMs >= origin {
                 print("  \(t(row.startMs))–\(t(row.endMs))  \(row)\(row.problems.isEmpty ? "" : "  [\(row.problems.joined(separator: ", "))]")")
             }
-            print("e2e: steps:")
+            print("e2e: steps (sent–done, then held until the next):")
             for step in steps {
-                print("  \(t(step.sentMs))–\(t(step.endMs))  \(step.name): \(step.expected)")
+                print("  \(t(step.sentMs))–\(t(step.doneMs))–\(t(step.endMs))  \(step.name): \(step.expected)")
             }
 
             for (i, step) in steps.enumerated() {
@@ -480,6 +647,14 @@ enum E2E {
                 for row in during {
                     if row.asExpected != step.expected {
                         Issue.record("\(step.name) at \(t(max(row.startMs, checkedFrom))): expected \(step.expected), got \(row)")
+                    }
+                    else if !row.problems.isEmpty {
+                        Issue.record("\(step.name): \(row.problems.joined(separator: ", "))")
+                    }
+                }
+                for row in rows where row.startMs >= step.sentMs && row.startMs < checkedFrom && row.endMs <= checkedFrom {
+                    if row.asExpected != step.expected {
+                        Issue.record("\(step.name): passing row at \(t(row.startMs))–\(t(row.endMs)) during the changeover: \(row)")
                     }
                     else if !row.problems.isEmpty {
                         Issue.record("\(step.name): \(row.problems.joined(separator: ", "))")
@@ -505,6 +680,35 @@ enum E2E {
             for (prev, next) in zip(runRows, runRows.dropFirst()) {
                 if next.startMs != prev.endMs {
                     Issue.record("rows at \(t(prev.endMs)) and \(t(next.startMs)): \(next.startMs < prev.endMs ? "overlap" : "gap")")
+                }
+                else if next.content == prev.content {
+                    Issue.record("rows at \(t(prev.startMs)) and \(t(next.startMs)) record the same: \(next.content)")
+                }
+            }
+            // SIGTERM closes the row in progress then (`Tracker`), not at its last sample.
+            if let last = rows.last, let stopSentMs, let stopDoneMs {
+                if last.endMs < stopSentMs || last.endMs > stopDoneMs {
+                    Issue.record("the last row ends at \(t(last.endMs)), not when the tracker was stopped (\(t(stopSentMs))–\(t(stopDoneMs)))")
+                }
+            }
+
+            let probes = try pageProbes()
+            for app in Set(steps.map(\.expected.app.bundleId)).sorted() {
+                guard let step = steps.first(where: { $0.expected.app.bundleId == app && $0.expected.url != nil }) else {
+                    continue
+                }
+                guard let probe = probes[app] else {
+                    Issue.record("\(app): no page probe row")
+                    continue
+                }
+                if probe.hasContentPages != 1 {
+                    Issue.record("\(app): has_content_pages \(probe.hasContentPages.map(String.init) ?? "nil"), expected 1")
+                }
+                if let decided = probe.decidedAtMs, decided < step.sentMs || decided > step.doneMs + E2E.latencyMs {
+                    Issue.record("\(app): page reading decided at \(t(decided)), not during \"\(step.name)\", its first step with a page (\(t(step.sentMs))–\(t(step.doneMs + E2E.latencyMs)))")
+                }
+                if probe.probeCount < 1 {
+                    Issue.record("\(app): probe_count \(probe.probeCount)")
                 }
             }
         }

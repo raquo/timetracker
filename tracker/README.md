@@ -48,7 +48,7 @@ INSERT OR REPLACE INTO app_page_reading_choice VALUES (0, 'md.obsidian', 2, NULL
 SQL
 ```
 
-To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> /tmp/ax.txt`. With `--json` after the output file, it instead records the focused window as a test fixture (see `tracker/Tests/TrackerCoreTests/Fixtures/README.md`). What it writes, and how to check a new app with it: [docs/diagnostics.md](../docs/diagnostics.md). To see which Accessibility notifications an app sends as things change: `--watch-ax <bundle-id> /tmp/watch.txt <seconds>`, same doc.
+To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --args --dump-ax <bundle-id> /tmp/ax.txt`. With `--json` after the output file, it instead records the focused window as a test fixture (see `tracker/Tests/TrackerCoreTests/Fixtures/README.md`). What it writes, and how to check a new app with it: [docs/diagnostics.md](../docs/diagnostics.md). To see which Accessibility notifications an app sends as things change: `--watch-ax <bundle-id or pid> /tmp/watch.txt <seconds>`, same doc.
 
 ## Code layout
 

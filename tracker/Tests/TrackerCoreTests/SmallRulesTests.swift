@@ -202,7 +202,7 @@ struct CommandLineTests {
     }
 
     @Test func watchAx() {
-        #expect(command("--watch-ax", "com.google.Chrome", "/tmp/a.txt", "30") == .watchAx(bundleId: "com.google.Chrome", outputPath: "/tmp/a.txt", seconds: 30))
+        #expect(command("--watch-ax", "com.google.Chrome", "/tmp/a.txt", "30") == .watchAx(app: "com.google.Chrome", outputPath: "/tmp/a.txt", seconds: 30))
         #expect(command("--watch-ax", "com.google.Chrome", "/tmp/a.txt") == .usageError)
         #expect(command("--watch-ax", "com.google.Chrome", "/tmp/a.txt", "soon") == .usageError)
         #expect(command("--watch-ax", "com.google.Chrome", "/tmp/a.txt", "0") == .usageError)

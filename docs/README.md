@@ -28,7 +28,7 @@ Tracker:
 - [privacy.md](privacy.md): overview of every privacy measure (no keylogging, scrubbing before writing, data stays local), and what's planned.
 - [url-scrubbing.md](url-scrubbing.md): fragments, redaction, `AXDocument` URLs, decided exceptions.
 - [diagnostics.md](diagnostics.md): the `--dump-ax` tool, Accessibility fixtures and replay tests, checking a new app.
-- [end-to-end-tests.md](end-to-end-tests.md): the real tracker recording a scripted test app, and what that can and can't cover.
+- [end-to-end-tests.md](end-to-end-tests.md): the real tracker recording a scripted test app and a throwaway Chrome, and what that can and can't cover.
 
 Research (to be reorganized):
 - [tracking-techniques.md](../notes/tracking-techniques.md): how the tracker can get data from macOS, and what specific apps expose.

@@ -6,17 +6,17 @@ import os
 ///
 /// - `TimeTracker`: track, into `databasePath()`.
 /// - `TimeTracker --dump-ax <bundle-id> <output-file> [--json]`: see `AxDump`.
-/// - `TimeTracker --watch-ax <bundle-id> <output-file> <seconds>`: see `AxWatch`.
+/// - `TimeTracker --watch-ax <bundle-id or pid> <output-file> <seconds>`: see `AxWatch`.
 public enum TrackerMain {
     enum Command: Equatable {
         case track
         case dumpAx(bundleId: String, outputPath: String, format: AxDump.Format)
-        case watchAx(bundleId: String, outputPath: String, seconds: Double)
+        case watchAx(app: String, outputPath: String, seconds: Double)
         /// `--dump-ax` or `--watch-ax` with the wrong arguments.
         case usageError
     }
 
-    static let usage = "usage: TimeTracker [--dump-ax <bundle-id> <output-file> [--json] | --watch-ax <bundle-id> <output-file> <seconds>]"
+    static let usage = "usage: TimeTracker [--dump-ax <bundle-id> <output-file> [--json] | --watch-ax <bundle-id or pid> <output-file> <seconds>]"
 
     /// Other arguments are ignored: macOS and Xcode may add their own (`-NSDocumentRevisionsDebugMode YES`).
     static func command(arguments: [String]) -> Command {
@@ -27,7 +27,7 @@ public enum TrackerMain {
             guard arguments.count == 5, let seconds = Double(arguments[4]), seconds > 0 else {
                 return .usageError
             }
-            return .watchAx(bundleId: arguments[2], outputPath: arguments[3], seconds: seconds)
+            return .watchAx(app: arguments[2], outputPath: arguments[3], seconds: seconds)
         }
         guard arguments[1] == "--dump-ax" else {
             return .track
@@ -49,8 +49,8 @@ public enum TrackerMain {
             break
         case .dumpAx(let bundleId, let outputPath, let format):
             exit(AxDump.run(bundleId: bundleId, outputPath: outputPath, format: format))
-        case .watchAx(let bundleId, let outputPath, let seconds):
-            exit(AxWatch.run(bundleId: bundleId, outputPath: outputPath, seconds: seconds))
+        case .watchAx(let app, let outputPath, let seconds):
+            exit(AxWatch.run(app: app, outputPath: outputPath, seconds: seconds))
         case .usageError:
             // Not tracking instead: the mistake would go unnoticed.
             FileHandle.standardError.write(Data("\(usage)\n".utf8))

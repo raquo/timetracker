@@ -7,7 +7,7 @@ How we find out what an app exposes to the tracker, and how what we find becomes
 - `TimeTracker --dump-ax <bundle-id> <output-file>` writes what a running app's windows expose, and what the tracker's page search finds in them, to a text file.
 - With `--json` at the end, it saves the app's focused window as a fixture instead: a JSON file in `tracker/Tests/TrackerCoreTests/Fixtures/ax/`.
 - `swift test` replays every fixture and checks what the tracker would record from it.
-- `TimeTracker --watch-ax <bundle-id> <output-file> <seconds>` logs which Accessibility notifications a running app sends, and when its focused page changes, to a text file as they happen.
+- `TimeTracker --watch-ax <bundle-id or pid> <output-file> <seconds>` logs which Accessibility notifications a running app sends, and when its focused page changes, to a text file as they happen.
 
 How to run the dump tool: [tracker/README.md](../tracker/README.md#page-url-and-title-from-app-web-content).
 
@@ -32,9 +32,10 @@ Errors (no running app with that bundle ID, no focused window) are written to th
 
 - **Each notification is registered three times:** on the app element, on the focused window, and on the focused window's web area (moved along when either changes). Each line says which one it came through, since an app needn't deliver a notification to every registration. Notifications the app element refuses are logged at the start.
 - **The focused page is polled every 100 ms,** and a line is written when its URL or title changes, or it's a new element. That shows a change the app sent no notification for, and when a navigation replaces the page element (notifications registered on the old one stop).
-- Lines are in ms since the start. Titles and URLs are written as they are, unscrubbed: the file is for a look on this machine.
+- **A pid instead of the bundle ID** picks one copy of an app that runs more than once, such as a second Chrome with its own profile (`--user-data-dir`), beside the user's.
+- Lines are in ms since the start; the first line gives the start in Unix ms, to line up with another log. Titles and URLs are written as they are, unscrubbed: the file is for a look on this machine.
 
-Found with it: WebKit sends nothing for a page title change or a URL change without a load ([page-reading.md](page-reading.md#background)).
+Found with it: WebKit sends nothing for a page title change or a URL change without a load; Chrome sends nothing for a URL change without a load or a new title ([page-reading.md](page-reading.md#background)).
 
 ## Accessibility fixtures
 

@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-/// Diagnostic: `TimeTracker --watch-ax <bundle-id> <output-file> <seconds>` logs, for that long,
+/// Diagnostic: `TimeTracker --watch-ax <bundle-id or pid> <output-file> <seconds>` logs, for that long,
 /// which Accessibility notifications a running app sends and for which elements, to find out
 /// what the tracker could listen for. Registers each notification three times: on the app, on
 /// the focused window, and on the focused window's web area (re-registered when that changes);
@@ -10,7 +10,9 @@ import ApplicationServices
 /// (polled every 100 ms), since a new element means notifications registered on the old one stop.
 ///
 /// Like `--dump-ax`, must run as the installed app (or the build copy) for the tracker's
-/// Accessibility permission. Lines are written as they come, in ms since the start.
+/// Accessibility permission. Lines are written as they come, in ms since the start (the first
+/// line gives the start in Unix ms, to line up with other logs). A pid picks one copy of an app
+/// that runs more than once (a second Chrome with its own profile has the same bundle ID).
 enum AxWatch {
     /// Notifications an element doesn't support are refused at registration; those are logged
     /// for the app element only, since many elements refuse many of them.
@@ -26,7 +28,7 @@ enum AxWatch {
         "AXActiveElementChanged", "AXURLChanged",
     ]
 
-    static func run(bundleId: String, outputPath: String, seconds: Double) -> Int32 {
+    static func run(app target: String, outputPath: String, seconds: Double) -> Int32 {
         guard FileManager.default.createFile(atPath: outputPath, contents: nil), let out = FileHandle(forWritingAtPath: outputPath) else {
             FileHandle.standardError.write(Data("can't write \(outputPath)\n".utf8))
             return 1
@@ -37,9 +39,17 @@ enum AxWatch {
             out.write(Data("\(String(format: "%6d", ms)) \(s)\n".utf8))
         }
         Accessibility.setGlobalTimeout()
+        line("started at \(Int64(startedAt.timeIntervalSince1970 * 1000)) Unix ms")
         line("AXIsProcessTrusted: \(AXIsProcessTrusted())")
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else {
-            line("no running app with bundle ID \(bundleId)")
+        let found: NSRunningApplication?
+        if let pid = pid_t(target) {
+            found = NSRunningApplication(processIdentifier: pid)
+        }
+        else {
+            found = NSRunningApplication.runningApplications(withBundleIdentifier: target).first
+        }
+        guard let app = found else {
+            line("no running app \(target)")
             return 1
         }
         let appElement = AXUIElementCreateApplication(app.processIdentifier)

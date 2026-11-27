@@ -1,12 +1,14 @@
 #!/bin/bash
 # End-to-end test: the real tracker (build/TimeTracker.app, which holds the Accessibility
 # permission) records into a temporary database while the test drives two copies of the
-# E2ETarget app; then the rows are checked. See Tests/TrackerE2ETests.
+# E2ETarget app, then a throwaway Google Chrome; then the rows are checked. See
+# Tests/TrackerE2ETests.
 #
-# Takes over the screen for about 45 s: don't click or type meanwhile (moving the mouse is fine).
-# Your own tracker keeps running and records the run too.
+# Takes over the screen for about 80 s: don't click or type meanwhile (moving the mouse is fine).
+# Your own tracker and Chrome keep running; your tracker records the run too.
 #
-# KEEP=1 keeps the run folder (database, pages) for a look afterwards.
+# KEEP=1 keeps the run folder (database, pages, Chrome's profile) for a look afterwards.
+# CHROME=<path to the app> drives another Chrome; CHROME= (empty) skips Chrome's steps.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/config.sh
@@ -17,6 +19,11 @@ LOCK="$TMP/timetracker-e2e.lock"
 RUN_PREFIX="$TMP/timetracker-e2e-run."
 E2E_APPS="build/e2e"
 TRACKER_BIN="$PWD/$BUILD_APP/Contents/MacOS/TimeTracker"
+CHROME="${CHROME-/Applications/Google Chrome.app}"
+if [[ -n "$CHROME" && ! -d "$CHROME" ]]; then
+    echo "error: no Chrome at $CHROME (CHROME= skips Chrome's steps)" >&2
+    exit 1
+fi
 
 # The lock holds the pid of the run that took it, so a lock left by a killed run is taken over.
 if ! mkdir "$LOCK" 2>/dev/null; then
@@ -29,9 +36,9 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 echo $$ > "$LOCK/pid"
 
-# Leftovers of a run that died without cleaning up: its target apps (their arguments name the
-# run folder), a tracker running from the build copy (also stops a `--dump-ax` run from it), and
-# run folders.
+# Leftovers of a run that died without cleaning up: its target apps and Chrome (their arguments
+# name the run folder), a tracker running from the build copy (also stops a `--dump-ax` run from
+# it), and run folders.
 pkill -f "$RUN_PREFIX" || true
 pkill -f "$TRACKER_BIN" || true
 rm -rf "$RUN_PREFIX"*
@@ -73,4 +80,5 @@ RUN="$(mktemp -d "${RUN_PREFIX}XXXXXX")"
 TIMETRACKER_E2E_TRACKER="$PWD/$BUILD_APP" \
 TIMETRACKER_E2E_APPS="$PWD/$E2E_APPS" \
 TIMETRACKER_E2E_RUN="$RUN" \
+TIMETRACKER_E2E_CHROME="$CHROME" \
     swift test --filter TrackerE2ETests
