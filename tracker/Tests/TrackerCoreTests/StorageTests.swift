@@ -78,12 +78,12 @@ struct StorageTests {
         let temp = try TempDatabase()
         let apps = try AppLookup(db: temp.db)
         var s = Snapshot(bundleId: "com.example.cafe", appName: nfc, bundlePath: "/Applications/Cafe.app")
-        let id = try #require(try apps.id(for: s))
+        let id = try #require(try apps.id(for: s.processApp))
         s.appName = nfd
-        #expect(try apps.id(for: s) == id)
+        #expect(try apps.id(for: s.processApp) == id)
         #expect(try temp.db.query("SELECT hex(name) FROM tracker_app") == [[.text(hex(nfd))]])
         s.appName = nfc
-        #expect(try apps.id(for: s) == id)
+        #expect(try apps.id(for: s.processApp) == id)
         #expect(try temp.db.query("SELECT hex(name) FROM tracker_app") == [[.text(hex(nfc))]])
     }
 }

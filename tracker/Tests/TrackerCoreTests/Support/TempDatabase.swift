@@ -51,7 +51,7 @@ final class TempDatabase {
                 a.identifier_type, a.identifier, a.app_path, a.name,
                 t.title, p.path, u.url, pt.title, r.role, r.subrole,
                 i.is_input_idle, i.is_screen_locked, i.is_main_window, i.is_full_screen,
-                i.has_display_sleep_assertion, i.is_camera_in_use, i.is_mic_in_use
+                i.display_sleep_holders, i.is_camera_in_use, i.mic_holders
             FROM tracker_interval i
             LEFT JOIN tracker_app a ON a.id = i.app_id
             LEFT JOIN tracker_title t ON t.id = i.title_id
@@ -61,8 +61,7 @@ final class TempDatabase {
             LEFT JOIN tracker_window_role r ON r.id = i.window_role_id
             ORDER BY i.start_ms, i.id
             """).map { (r: [SqlValue]) -> StoredInterval in
-            #expect(r[16] == .null && r[17] == .null && r[18] == .null, "signals not recorded yet must stay NULL", sourceLocation: sourceLocation)
-            return StoredInterval(
+            StoredInterval(
                 startMs: r[0].int!,
                 endMs: r[1].int!,
                 app: r[2].int.map { StoredApp(type: AppIdentifierType(rawValue: $0)!, identifier: r[3].text!, path: r[4].text!, name: r[5].text!) },
@@ -75,7 +74,10 @@ final class TempDatabase {
                 isInputIdle: r[12].int! != 0,
                 isScreenLocked: r[13].int! != 0,
                 isMainWindow: r[14].int.map { $0 != 0 },
-                isFullScreen: r[15].int.map { $0 != 0 }
+                isFullScreen: r[15].int.map { $0 != 0 },
+                displaySleepHolders: r[16].text,
+                isCameraInUse: r[17].int.map { $0 != 0 },
+                micHolders: r[18].text
             )
         }
     }
@@ -108,6 +110,10 @@ struct StoredInterval: Equatable, CustomStringConvertible {
     var isScreenLocked: Bool
     var isMainWindow: Bool?
     var isFullScreen: Bool?
+    /// Raw JSON.
+    var displaySleepHolders: String?
+    var isCameraInUse: Bool?
+    var micHolders: String?
 
     /// The row the tracker should store for `s` from `startMs` to `endMs`. Test snapshots
     /// always carry a name and a bundle path, so the app's columns are spelled out here
@@ -131,12 +137,18 @@ struct StoredInterval: Equatable, CustomStringConvertible {
         isScreenLocked = s.isScreenLocked
         isMainWindow = s.isMainWindow
         isFullScreen = s.isFullScreen
+        isCameraInUse = s.presence.isCameraInUse
+        // Holder JSON holds row IDs: tests with holders spell it out.
+        precondition((s.presence.displaySleepHolders?.isEmpty ?? true) && (s.presence.micHolders?.isEmpty ?? true),"spell out rows with holders")
+        displaySleepHolders = s.presence.displaySleepHolders.map { _ in "[]" }
+        micHolders = s.presence.micHolders.map { _ in "[]" }
     }
 
     init(
         startMs: Int64, endMs: Int64, app: StoredApp?, windowTitle: String?, documentPath: String?,
         pageUrl: String?, pageTitle: String?, windowRole: String?, windowSubrole: String?,
-        isInputIdle: Bool, isScreenLocked: Bool, isMainWindow: Bool?, isFullScreen: Bool?
+        isInputIdle: Bool, isScreenLocked: Bool, isMainWindow: Bool?, isFullScreen: Bool?,
+        displaySleepHolders: String? = nil, isCameraInUse: Bool? = nil, micHolders: String? = nil
     ) {
         self.startMs = startMs
         self.endMs = endMs
@@ -151,6 +163,9 @@ struct StoredInterval: Equatable, CustomStringConvertible {
         self.isScreenLocked = isScreenLocked
         self.isMainWindow = isMainWindow
         self.isFullScreen = isFullScreen
+        self.displaySleepHolders = displaySleepHolders
+        self.isCameraInUse = isCameraInUse
+        self.micHolders = micHolders
     }
 
     var description: String {

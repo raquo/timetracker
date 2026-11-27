@@ -49,3 +49,8 @@ Some settings change what the tracker does: per-app page reading today; exclusio
 ## Code
 
 Tracker code layout: [tracker/README.md](../tracker/README.md), "Code layout".
+
+## Operating environment
+
+- **macOS 15 or later.**
+- **No App Nap:** the tracker opts out (`Tracker.start()`), so its timers (the poll, settling, event delays) fire on time. It doesn't keep the Mac or the display awake.

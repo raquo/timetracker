@@ -4,7 +4,7 @@ When the tracker looks at the screen, and how what it sees becomes `tracker_inte
 
 ## Behaviour
 
-- **A sample** reads what's on screen right now: the frontmost app, its focused window (title, role, main / full screen, document), the page in it where pages are read, how long since the last input, and whether the screen is locked. Code: `Sampler` → `Snapshot`.
+- **A sample** reads what's on screen right now: the frontmost app, its focused window (title, role, main / full screen, document), the page in it where pages are read, how long since the last input, whether the screen is locked, and the [presence signals](idle-and-away.md#presence-signals) (display sleep held off, camera, mic). Code: `Sampler` → `Snapshot`.
 - **Equal samples extend the open row; a changed sample ends it and starts a new one.** So how often the tracker samples doesn't add rows; only changes do.
 - **Changes are recorded at the time they were first seen,** usually within a second of happening, at most ~5 s later (see [Late boundaries](#late-boundaries)).
 - **A change has to hold for two samples** before it's recorded (settling), so in-between states don't get rows.
@@ -21,7 +21,7 @@ Events, with a slow poll as a backstop. Code: `Tracker`, `WindowObserver`.
 | Where pages are read, also: keyboard focus moved (`AXFocusedUIElementChanged`), the page's title changed, a page finished loading (`AXLoadComplete`, app-wide) | same | apps whose window title stays the same while the page changes (Claude switching conversations) |
 | Any left click, anywhere (`leftMouseUp`) | 600 ms after the first click (see below) | changes that send no Accessibility event; the delay gives the app time to react to the click |
 | Lock, unlock, wake | at once | see [idle-and-away.md](idle-and-away.md) |
-| Poll | every 5 s | everything else: URL-only changes, going idle and back |
+| Poll | every 5 s | everything else: URL-only changes, going idle and back, [presence signals](idle-and-away.md#presence-signals) (read only then, and on wake, lock and unlock) |
 | A probe of the frontmost app's window comes due ([page-reading.md](page-reading.md#probing)) | when due | pages of an app not decided on yet, in a tree that was still empty at the previous probe |
 | SIGUSR1 | at once | nothing in normal use: for the [end-to-end test](end-to-end-tests.md) |
 
@@ -62,9 +62,9 @@ A boundary is recorded when the change is noticed, which is after it happened:
 
 - after an Accessibility event: ~300 ms;
 - after a click: 600 ms;
-- with neither (a URL that changes without a load or title change, a page title change in WebKit, input resuming after idle): up to the 5 s poll. Which page changes send no events: [page-reading.md](page-reading.md#limitations).
+- with neither (a URL that changes without a load or title change, a page title change in WebKit, input resuming after idle): up to the 5 s poll. Which page changes send no events: [page-reading.md](page-reading.md#limitations). Presence signals always wait for the poll ([idle-and-away.md](idle-and-away.md#limitations)).
 
-Settling records from the first sighting, so it adds nothing here. The poll interval bounds the worst case, which is why it shouldn't be raised lightly.
+Settling records from the first sighting, so it adds nothing here. The poll interval bounds the worst case, which is why it shouldn't be raised lightly. The poll and the delays above are timers, which is why the tracker opts out of App Nap: [architecture.md](architecture.md#operating-environment).
 
 ## Accessibility timeouts
 

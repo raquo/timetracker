@@ -34,7 +34,9 @@ final class Sampler {
         self.pageReading = pageReading
     }
 
-    func sample(nowMs: Int64, isScreenLocked: Bool, isAxTrusted: Bool) -> Sample {
+    /// `presence`: as of the tracker's last read (see `Tracker.refreshPresence()`), ignored
+    /// while the screen is locked.
+    func sample(nowMs: Int64, isScreenLocked: Bool, isAxTrusted: Bool, presence: PresenceSignals) -> Sample {
         if isScreenLocked {
             pageReading.noteSample(app: nil, mode: .off, isActive: false, hasProbeableWindow: false, atMs: nowMs)
             return Sample(
@@ -47,7 +49,7 @@ final class Sampler {
             )
         }
         pageReading.refresh()
-        var snapshot = Snapshot()
+        var snapshot = Snapshot(presence: presence)
         var page: WebPage<AXUIElement>?
         var hasProbeableWindow = false
         var nextProbeAtMs: Int64?

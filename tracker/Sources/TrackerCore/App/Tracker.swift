@@ -37,6 +37,8 @@ final class Tracker {
     private let windowObserver: WindowObserver
     private let pollIntervalSeconds: Int
     private var timer: DispatchSourceTimer?
+    /// Keeps App Nap off for the tracker's lifetime (see `start()`).
+    private var activity: NSObjectProtocol?
     private var signalSources: [DispatchSourceSignal] = []
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var clickMonitor: Any?
@@ -45,6 +47,8 @@ final class Tracker {
     private var isScreenLocked = false
     private var isAsleep = false
     private var isAxTrusted: Bool?
+    /// As of the last read (see `refreshPresence()`).
+    private var presence = PresenceSignals()
     private var scheduledTicks: Set<DelayedTick> = []
     /// The sample for the frontmost app's next probe, and when it's due.
     private var probeTick: (atMs: Int64, work: DispatchWorkItem)?
@@ -64,6 +68,9 @@ final class Tracker {
 
     func start() {
         Accessibility.setGlobalTimeout()
+        // A windowless app that plays no sound may be napped, and then its timers fire late: the
+        // poll, settling, the event delay. Doesn't keep the Mac or the display awake.
+        activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "Sampling activity")
 
         let workspace = NSWorkspace.shared.notificationCenter
         observe(workspace, NSWorkspace.didActivateApplicationNotification) { $0.tick() }
@@ -75,17 +82,17 @@ final class Tracker {
         }
         observe(workspace, NSWorkspace.didWakeNotification) { tracker in
             tracker.isAsleep = false
-            tracker.tick()
+            tracker.tick(refreshingPresence: true)
         }
 
         let distributed = DistributedNotificationCenter.default()
         observe(distributed, Notification.Name("com.apple.screenIsLocked")) { tracker in
             tracker.isScreenLocked = true
-            tracker.tick()
+            tracker.tick(refreshingPresence: true)
         }
         observe(distributed, Notification.Name("com.apple.screenIsUnlocked")) { tracker in
             tracker.isScreenLocked = false
-            tracker.tick()
+            tracker.tick(refreshingPresence: true)
         }
 
         // Any click anywhere triggers a sample: catches changes that send no Accessibility event
@@ -106,7 +113,9 @@ final class Tracker {
 
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now(), repeating: .seconds(pollIntervalSeconds), leeway: .milliseconds(250))
-        timer.setEventHandler { [weak self] in self?.tick() }
+        timer.setEventHandler { [weak self] in
+            self?.tick(refreshingPresence: true)
+        }
         timer.resume()
         self.timer = timer
 
@@ -126,7 +135,7 @@ final class Tracker {
         signal(SIGUSR1, SIG_IGN)
         let sampleNow = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: queue)
         sampleNow.setEventHandler { [weak self] in
-            self?.tick()
+            self?.tick(refreshingPresence: true)
         }
         sampleNow.resume()
         signalSources.append(sampleNow)
@@ -139,13 +148,17 @@ final class Tracker {
         log.info("Tracker started")
     }
 
-    private func tick() {
+    /// `refreshingPresence`: read the presence signals again first; otherwise the last read is reused.
+    private func tick(refreshingPresence: Bool = false) {
         guard !isAsleep else {
             return
         }
+        if refreshingPresence {
+            refreshPresence()
+        }
         let isAxTrusted = checkAccessibility()
         let now = nowMs()
-        let sample = sampler.sample(nowMs: now, isScreenLocked: isScreenLocked, isAxTrusted: isAxTrusted)
+        let sample = sampler.sample(nowMs: now, isScreenLocked: isScreenLocked, isAxTrusted: isAxTrusted, presence: presence)
         windowObserver.observe(pid: sample.frontmostPid, watchFocusedElement: sample.isReadingPages, isAxTrusted: isAxTrusted)
         windowObserver.watchPage(sample.pageElement)
         scheduleProbeTick(atMs: sample.nextProbeAtMs, nowMs: now)
@@ -168,6 +181,13 @@ final class Tracker {
         case .wait:
             scheduleTick(.settle)
         }
+    }
+
+    /// Reads the presence signals, or clears them while the screen is locked (they're recorded as
+    /// NULL then). Only on the poll (which also fires at start), wake, lock, unlock and SIGUSR1:
+    /// other samples reuse the last read, so a value is at most one poll old.
+    private func refreshPresence() {
+        presence = isScreenLocked ? PresenceSignals() : PresenceReader.read()
     }
 
     /// Ticks after `kind`'s delay. Further requests of the same kind until then are absorbed by it.

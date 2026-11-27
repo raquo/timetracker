@@ -55,7 +55,7 @@ To explore what an app exposes: `open -n -W ~/Applications/TimeTracker.app --arg
 - `Sources/TimeTracker/main.swift`: the executable, only calls `TrackerMain.run` in `TrackerCore`.
 - `Sources/TrackerCore/`: everything else, a library so tests can import it.
   - `App/`: entry point and command line (`TrackerMain`), event wiring (`Tracker`), instance lock, logging.
-  - `Sampling/`: what's on screen now (`Sampler` → `Snapshot`), and holding back unconfirmed changes (`Settler`).
+  - `Sampling/`: what's on screen now (`Sampler` → `Snapshot`), presence signals (`PresenceReader` → `PresenceSignals`), and holding back unconfirmed changes (`Settler`).
   - `Recording/`: snapshots into `tracker_interval` rows: the row logic (`Recorder`) and its SQL (`IntervalStore`).
   - `PageReading/`: finding the page in a window (`PageSearch`, pure tree reads), deciding per app whether to read pages (`PageReadingPolicy`) and its tables (`PageReadingStore`).
   - `Accessibility/`: `AXUIElement` reads and the `AccessibilityNode` protocol, change notifications (`WindowObserver`), switching Electron trees on.

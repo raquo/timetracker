@@ -137,6 +137,19 @@ enum Schema {
         ALTER TABLE tracker_interval RENAME COLUMN url_id TO page_url_id;
         ALTER TABLE tracker_interval RENAME COLUMN is_idle TO is_input_idle;
         """,
+
+        // 7: presence signals. is_camera_in_use (from 1) is recorded from here on. The holder
+        // lists replace has_display_sleep_assertion and is_mic_in_use (from 1, always NULL), which
+        // would only repeat whether a list is empty. JSON arrays of {"app": tracker_app.id,
+        // "rsn": assertion name, "via": tracker_app.id of a proxy}, keys left out when unknown,
+        // in canonical order (Swift: `HolderEntry`). '[]': none; NULL: not measured (screen
+        // locked, read failed).
+        """
+        ALTER TABLE tracker_interval ADD COLUMN display_sleep_holders TEXT;
+        ALTER TABLE tracker_interval ADD COLUMN mic_holders TEXT;
+        ALTER TABLE tracker_interval DROP COLUMN has_display_sleep_assertion;
+        ALTER TABLE tracker_interval DROP COLUMN is_mic_in_use;
+        """,
     ]
 
     static func migrate(_ db: Database) throws {

@@ -19,10 +19,17 @@ struct Snapshot: Equatable {
     var pageTitle: String? = nil
     var isInputIdle = false
     var isScreenLocked = false
+    /// Display sleep assertion, camera, mic. All nil while the screen is locked.
+    var presence = PresenceSignals()
 
     /// The app, as the user thinks of it. nil when there's no frontmost app (screen locked) or
     /// macOS gave neither a bundle ID nor an executable path.
     var app: AppIdentity? {
         AppIdentity(bundleId: bundleId, executablePath: executablePath)
+    }
+
+    /// The app, as stored in `tracker_app`.
+    var processApp: ProcessApp? {
+        app.map { ProcessApp(identity: $0, appPath: bundlePath ?? executablePath ?? "", name: appName) }
     }
 }

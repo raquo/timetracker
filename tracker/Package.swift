@@ -3,7 +3,8 @@ import PackageDescription
 
 let package = Package(
     name: "TimeTracker",
-    platforms: [.macOS(.v13)],
+    // macOS 15: see docs/architecture.md.
+    platforms: [.macOS("15.0")],
     targets: [
         // Everything but the entry point, so tests can import it.
         .target(

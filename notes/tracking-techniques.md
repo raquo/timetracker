@@ -41,8 +41,8 @@ In short: window-level Accessibility is the cheap baseline for every app; page-c
 | Safari / Chromium URL, alternative | Apple Events: `URL` and `title` of `active tab of front window`, with a timeout, off the main thread | Automation (per browser) | not needed so far |
 | Idle | `CGEventSource.secondsSinceLastEventType(.combinedSessionState, anyInputEventType)` | none | recorded |
 | Lock / sleep / wake | `NSWorkspace` `willSleep` / `didWake`; `com.apple.screenIsLocked` / `screenIsUnlocked` distributed notifications; at startup, `CGSessionCopyCurrentDictionary` (`CGSSessionScreenIsLocked`) | none | recorded |
-| Video / call while idle | Power assertions: `IOPMCopyAssertionsByProcess`, look for `PreventUserIdleDisplaySleep` | none | planned |
-| Camera / mic in use | CoreMediaIO `kCMIODevicePropertyDeviceIsRunningSomewhere`; CoreAudio `kAudioDevicePropertyDeviceIsRunningSomewhere` | none | planned |
+| Video / call while idle | Power assertions: `IOPMCopyAssertionsByProcess`, type `PreventUserIdleDisplaySleep` | none | recorded (see [docs/idle-and-away.md](../docs/idle-and-away.md#presence-signals)) |
+| Camera / mic in use | CoreMediaIO `kCMIODevicePropertyDeviceIsRunningSomewhere`; mic: CoreAudio's audio process list (`kAudioProcessPropertyIsRunningInput`), skipped while no device that has an input is running (`kAudioDevicePropertyDeviceIsRunningSomewhere`, for input or output) | none | recorded (same) |
 
 ## When the tracker samples
 

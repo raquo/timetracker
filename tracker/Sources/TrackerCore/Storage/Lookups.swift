@@ -119,12 +119,13 @@ final class AppLookup {
         updateName = try db.prepare("UPDATE tracker_app SET name = ?1 WHERE id = ?2 AND name IS NOT ?1")
     }
 
-    /// nil when the snapshot has no app, or macOS gave neither a bundle ID nor an executable path.
-    func id(for s: Snapshot) throws -> Int64? {
-        guard let key = Self.key(for: s) else {
+    /// nil when `app` is nil. A nil name is derived from the path.
+    func id(for app: ProcessApp?) throws -> Int64? {
+        guard let app else {
             return nil
         }
-        let name = s.appName ?? URL(fileURLWithPath: key.appPath.isEmpty ? key.app.identifier : key.appPath).lastPathComponent
+        let key = Key(app: app.identity, appPath: app.appPath)
+        let name = app.name ?? URL(fileURLWithPath: key.appPath.isEmpty ? key.app.identifier : key.appPath).lastPathComponent
         guard let id = try lookup.id(for: key, extra: [.text(name)]) else {
             return nil
         }
@@ -134,12 +135,5 @@ final class AppLookup {
             names[id] = name
         }
         return id
-    }
-
-    private static func key(for s: Snapshot) -> Key? {
-        guard let app = s.app else {
-            return nil
-        }
-        return Key(app: app, appPath: s.bundlePath ?? s.executablePath ?? "")
     }
 }

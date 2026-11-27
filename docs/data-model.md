@@ -37,17 +37,38 @@ Attributes, all describing the frontmost app's focused window at that moment:
 | `page_url_id`, `page_title_id` | URL and title of the same web page: the one shown in the focused window, in apps whose pages are read (browsers, Claude, …) → `tracker_url`, `tracker_title`. Both are read from the same page element. URLs are scrubbed. |
 | `is_input_idle` | 1 inside a stretch of ≥ 60 s without user input (keyboard, mouse, trackpad). The stretch starts at the last input: [idle-and-away.md](idle-and-away.md). |
 | `is_screen_locked` | 1 while the screen is locked. All window attributes are NULL then. |
-| `has_display_sleep_assertion`, `is_camera_in_use`, `is_mic_in_use` | Not recorded yet: always NULL. |
+| `display_sleep_holders` | Which processes hold off display sleep (a video, a call, a keep-awake tool), and why: JSON, see [Presence signals](#presence-signals). |
+| `is_camera_in_use` | Some camera is running, in any process. |
+| `mic_holders` | Which processes have input running from an audio device (a mic): JSON. |
 
-**NULL means "not known", not "no".** A NULL attribute means the value wasn't there or couldn't be read: no focused window, no Accessibility permission, an app that doesn't report it, or page reading off for that app. It's never a stand-in for an empty or false value. The same goes for the not-yet-recorded signals: NULL is "not measured", unlike 0.
+**NULL means "not known", not "no".** A NULL attribute means the value wasn't there or couldn't be read: no focused window, no Accessibility permission, an app that doesn't report it, or page reading off for that app. It's never a stand-in for an empty or false value. The presence signals are NULL while the screen is locked, and when a read fails.
 
-**Older rows lack newer columns.** Columns added by later migrations (window role, main window, page title) are NULL in rows recorded before them.
+**Older rows lack newer columns.** Columns added by later migrations (window role, main window, page title, presence signals) are NULL in rows recorded before them.
 
 **Input-idle stretches have their real length,** so the server can apply any away threshold of 60 s or more: [idle-and-away.md](idle-and-away.md).
 
+### Presence signals
+
+What they are for, and where they come from: [idle-and-away.md](idle-and-away.md#presence-signals). `display_sleep_holders` and `mic_holders` are JSON arrays of objects, one per holder:
+
+```json
+[{"app":7,"rsn":"caffeinate command-line tool","via":31},{"app":12,"rsn":"Video Wake Lock"},{"app":40,"rsn":"Amphetamine (Single-Use - Display)"}]
+```
+
+| Key | Meaning |
+|---|---|
+| `app` | The process the signal is for → `tracker_app.id`. Left out when it couldn't be identified (the process exited before the tracker looked it up). |
+| `rsn` | The power assertion's name, as the app gave it. Display sleep only. |
+| `via` | The process holding it on `app`'s behalf (caffeinate) → `tracker_app.id`. Only when there is one; display sleep only. |
+
+- **`[]`:** measured, and nothing holds it. **NULL:** not measured.
+- **When they're read** (also `is_camera_in_use`): [idle-and-away.md](idle-and-away.md#presence-signals).
+- **Canonical form:** sorted by `app`, then `rsn` (byte for byte), then `via`, absent values first; no duplicates; keys in that order. Equal sets give equal strings, so a row only splits when the set changes, and the strings can be compared directly.
+- **Held or in use:** `x <> '[]'` (false for NULL too). Not: `x = '[]'`. Not measured: `x IS NULL`.
+
 ## Apps: `tracker_app`
 
-**One row per app identity per install location.** The same app at two paths is two rows, so history keeps which copy ran.
+**One row per app identity per install location.** The same app at two paths is two rows, so history keeps which copy ran. Referenced by `tracker_interval.app_id` (the frontmost app) and by the holders of [presence signals](#presence-signals), which include daemons and command-line tools (`/usr/bin/caffeinate`, identifier type 1).
 
 | Column | Meaning |
 |---|---|

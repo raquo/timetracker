@@ -21,7 +21,7 @@ Rules every tracker feature follows. Other docs refer to them instead of restati
   - privacy: URL scrubbing, and exclusions once they exist.
 - Everything else is the server's to filter. For example, browsers' own pages (`chrome://new-tab-page/`, `about:newtab`) and app-private schemes (`app://obsidian.md/…`) count as content and are recorded.
 - Each new signal is still weighed against its cost: the tracker's CPU, and row churn. A signal that changes constantly (a window's frame while it's dragged) multiplies rows.
-- Not yet recorded: power assertions, camera and mic (the columns exist, NULL for now).
+- Presence signals are recorded including info about who holds them, not just whether they're on: the server decides which holders mean the user is there ([idle-and-away.md](idle-and-away.md#presence-signals)).
 
 **Why.** The server can ignore or reinterpret what it doesn't use, and rules apply to all history. Unrecorded history can't be recovered.
 

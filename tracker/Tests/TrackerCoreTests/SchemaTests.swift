@@ -12,13 +12,21 @@ struct SchemaTests {
 
     @Test func freshDatabaseGetsEveryMigration() throws {
         let temp = try TempDatabase()
-        #expect(Schema.migrations.count == 6)
-        #expect(try version(temp.db) == 6)
+        #expect(Schema.migrations.count == 7)
+        #expect(try version(temp.db) == 7)
         #expect(try temp.db.query("SELECT count(*) FROM tracker_schema") == [[.int(1)]])
         #expect(try tables(temp.db) == [
             "tracker_app", "tracker_app_page_probe", "tracker_interval", "tracker_path",
             "tracker_schema", "tracker_title", "tracker_url", "tracker_window_role",
         ])
+    }
+
+    @Test func presenceColumnsAreHolderListsAndTheCameraFlag() throws {
+        let temp = try TempDatabase()
+        let columns = try temp.db.query("SELECT name FROM pragma_table_info('tracker_interval')").map { $0[0].text! }
+        #expect(columns.filter { $0.contains("camera") || $0.contains("holders") } == ["is_camera_in_use", "display_sleep_holders", "mic_holders"])
+        #expect(!columns.contains("has_display_sleep_assertion"))
+        #expect(!columns.contains("is_mic_in_use"))
     }
 
     @Test func migratingAgainChangesNothing() throws {
@@ -29,24 +37,24 @@ struct SchemaTests {
         try h.close()
         let before = try h.rows()
         try Schema.migrate(temp.db)
-        #expect(try version(temp.db) == 6)
+        #expect(try version(temp.db) == 7)
         #expect(try temp.db.query("SELECT count(*) FROM tracker_schema") == [[.int(1)]])
         #expect(try h.rows() == before)
     }
 
     @Test func newerDatabaseIsRefusedUntouched() throws {
         let temp = try TempDatabase()
-        try temp.db.exec("UPDATE tracker_schema SET version = 7")
+        try temp.db.exec("UPDATE tracker_schema SET version = 8")
         let tablesBefore = try tables(temp.db)
         do {
             try Schema.migrate(temp.db)
             Issue.record("expected newerThanCode")
         }
         catch SchemaError.newerThanCode(let databaseVersion, let codeVersion) {
-            #expect(databaseVersion == 7)
-            #expect(codeVersion == 6)
+            #expect(databaseVersion == 8)
+            #expect(codeVersion == 7)
         }
-        #expect(try version(temp.db) == 7)
+        #expect(try version(temp.db) == 8)
         #expect(try tables(temp.db) == tablesBefore)
     }
 
@@ -63,7 +71,7 @@ struct SchemaTests {
                 (1, '/usr/local/bin/tool', 0, 2000)
             """)
         try Schema.migrate(db)
-        #expect(try version(db) == 6)
+        #expect(try version(db) == 7)
         let rows = try db.query("""
             SELECT identifier_type, identifier, has_content_pages, decided_at_ms, probe_count, first_probe_at_ms, last_probe_at_ms
             FROM tracker_app_page_probe ORDER BY identifier_type
@@ -98,7 +106,7 @@ struct SchemaTests {
                 VALUES (1000, 2000, 1, 2, 1, 0);
             """)
         try Schema.migrate(db)
-        #expect(try version(db) == 6)
+        #expect(try version(db) == 7)
         let rows = try db.query("SELECT document_path_id, page_url_id, is_input_idle FROM tracker_interval")
         #expect(rows == [[.int(1), .int(2), .int(1)]])
     }
