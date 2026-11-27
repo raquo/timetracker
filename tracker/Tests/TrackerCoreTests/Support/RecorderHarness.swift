@@ -19,8 +19,14 @@ final class RecorderHarness {
 
     /// Through the settler first, as `Tracker.tick` does.
     func tick(_ s: Snapshot, at: Int64, idleSince: Int64? = nil) throws {
-        if case .record(let changedAtMs) = settler.decide(s, atMs: t0 + at, recorded: recorder.openSnapshot) {
-            try recorder.record(s, idleSinceMs: idleSince.map { t0 + $0 }, atMs: t0 + at, changedAtMs: changedAtMs)
+        let idleSinceMs = idleSince.map { t0 + $0 }
+        switch settler.decide(s, idleSinceMs: idleSinceMs, atMs: t0 + at, recorded: recorder.openSnapshot) {
+        case .record(let changedAtMs):
+            try recorder.record(s, idleSinceMs: idleSinceMs, atMs: t0 + at, changedAtMs: changedAtMs)
+        case .recordEarlier(let earlier, let earlierIdleSinceMs, let changedAtMs):
+            try recorder.record(earlier, idleSinceMs: earlierIdleSinceMs, atMs: t0 + at, changedAtMs: changedAtMs)
+        case .wait:
+            break
         }
     }
 

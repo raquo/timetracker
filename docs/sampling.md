@@ -39,7 +39,7 @@ A sample that differs from the open row isn't recorded right away:
 1. The tracker samples again 400 ms later.
 2. **Two samples at least 250 ms apart that agree confirm the change.** It's recorded from when the change was *first seen*, not when it was confirmed, so settling delays the write but doesn't move the boundary.
 3. **A change that reverts** before it's confirmed is dropped: the open row just continues.
-4. **A change that keeps changing** (a title ticking every second) is recorded as last seen after 3 s.
+4. **A change that never settles** (e.g. a title that changes faster than settling can confirm it, such as a progress percentage updating several times a second) is recorded after 3 s anyway, as the latest state that two samples at least 250 ms apart agreed on. If no two agreed, the last sample is recorded. If that wasn't the current sample, the current one starts a new pending change.
 5. **A change still pending when sampling stops for over 20 s** (sleep, a hang) is forgotten: after the gap it counts as first seen again, so its row can't start before the gap.
 6. **On sleep and quit,** a pending change is dropped, since it can't be confirmed any more.
 

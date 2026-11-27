@@ -146,7 +146,7 @@ final class Tracker {
         let sample = sampler.sample(nowMs: now, isScreenLocked: isScreenLocked, isAxTrusted: isAxTrusted)
         windowObserver.observe(pid: sample.frontmostPid, watchFocusedElement: sample.isReadingPages, isAxTrusted: isAxTrusted)
         windowObserver.watchPage(sample.pageElement)
-        switch settler.decide(sample.snapshot, atMs: now, recorded: recorder.openSnapshot) {
+        switch settler.decide(sample.snapshot, idleSinceMs: sample.idleSinceMs, atMs: now, recorded: recorder.openSnapshot) {
         case .record(let changedAtMs):
             do {
                 try recorder.record(sample.snapshot, idleSinceMs: sample.idleSinceMs, atMs: now, changedAtMs: changedAtMs)
@@ -154,6 +154,14 @@ final class Tracker {
             catch {
                 log.failure("record sample", error)
             }
+        case .recordEarlier(let snapshot, let idleSinceMs, let changedAtMs):
+            do {
+                try recorder.record(snapshot, idleSinceMs: idleSinceMs, atMs: now, changedAtMs: changedAtMs)
+            }
+            catch {
+                log.failure("record sample", error)
+            }
+            scheduleTick(.settle)
         case .wait:
             scheduleTick(.settle)
         }

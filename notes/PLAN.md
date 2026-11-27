@@ -103,7 +103,7 @@ Import history and rules so we don't start from zero.
 
 ### Tracker: consistency and noise
 
-- **Mismatched samples** (consistency #3 in [docs/record-consistency.md](../docs/record-consistency.md), and others): re-check the frontmost pid after sampling, and discard and re-sample if it changed. When a double-check fails and the sample is discarded, decide what the discarded span is attributed to: extend the previous row (last known-good state), leave a gap, or record only the fields we're sure of (e.g. app without title / URL). Cap retries.
+- **Mismatched samples** (consistency #3 in [docs/record-consistency.md](../docs/record-consistency.md)): handled by settling since 2026-11-26. **On hold:** count change notifications, and compare the count before and after each sample. If it went up, the sample was read while something changed, so it shouldn't confirm a change or be recorded at the 3 s cap. No extra Accessibility calls, but the count has to go up where notifications arrive, not on the tracker's queue, which is busy taking the sample. It would also show how often samples are read mid-change. **Dropped:** checking the frontmost app again after sampling. It only catches app switches, where the sample is outdated but not mixed, and `NSWorkspace.frontmostApplication` may lag anyway.
 - **Brief noise rows:** sub-second artifacts, not activity: the first sample after switching on an app's Accessibility tree (built lazily, so no URL yet), in-between states while switching. (Zero-length rows opened by the closing sample on quit / sleep are already deleted.) Avoid writing them where we can tell (e.g. wait for a new tree to be ready), and filter the rest in the server (merge into a neighbour below some duration). Settling drops those shorter than ~400 ms.
 - **Retry missed Accessibility subscriptions** (`WindowObserver`): if adding a notification fails (e.g. an app that has only just launched and isn't answering Accessibility yet), it isn't retried while that app stays frontmost, so its window and title changes are caught only by the 5 s poll until the user switches away and back. Check `AXObserverAddNotification`'s result and retry on the next sample (for the focused window's title subscription too).
 - **A sleep that never wakes the tracker:** after `willSleep` the tracker records nothing until `didWake`. If macOS ever posts the first without the second (a sleep that's cancelled or fails), recording stops silently until the next sleep. Not seen; unknown whether it can happen. Safety net if it does: treat a click or an app activation while "asleep" as a wake (the user is clearly there; dark wakes for Power Nap have neither), and log it.
@@ -165,7 +165,7 @@ Built: [docs/end-to-end-tests.md](../docs/end-to-end-tests.md). Open items:
 
 ## Order of work and rough size
 
-1. **Tracker** (in progress): ~1.3–1.9k LOC. Collecting since 2026-11-22. Next: consistency checks (#3), privacy (exclusions), menu bar item, video / call signals. Validate by running alongside Timing and comparing daily totals.
+1. **Tracker** (in progress): ~1.3–1.9k LOC. Collecting since 2026-11-22. Next: privacy (exclusions), menu bar item, video / call signals. Validate by running alongside Timing and comparing daily totals.
 2. **Timing import:** ~200–400 LOC, 1–3 days.
 3. **Server + UI:** ~4–8k LOC, ~5–10 weeks. Mostly ordinary UI work.
 

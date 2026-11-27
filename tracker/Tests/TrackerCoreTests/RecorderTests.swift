@@ -353,6 +353,20 @@ struct PipelineTests {
         #expect(try h.rows() == [row(a, 0, 8_400)])
     }
 
+    @Test func unsettledChangeRecordsTheStateSeenTwiceNotTheMixedSampleAtTheCap() throws {
+        let bHalf = Fixtures.firefox(b.pageUrl, a.pageTitle)
+        try h.tick(a, at: 0)
+        try h.tick(a, at: 400)
+        try h.tick(b, at: 1_000)
+        try h.tick(Fixtures.notes, at: 1_400)
+        try h.tick(b, at: 1_800)
+        try h.tick(Fixtures.textEdit("/Users/someone/other.txt"), at: 2_200)
+        try h.tick(bHalf, at: 4_000)
+        try h.tick(b, at: 4_400)
+        try h.close()
+        #expect(try h.rows() == [row(a, 0, 1_000), row(b, 1_000, 4_400)])
+    }
+
     @Test func changeSettlingWhenSamplingStopsDoesntSpanTheGap() throws {
         try h.tick(a, at: 0)
         try h.tick(a, at: 400)

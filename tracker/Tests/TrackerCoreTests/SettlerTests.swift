@@ -25,10 +25,15 @@ struct SettlerTests {
     private func run(_ steps: [Step], recorded initial: Snapshot?, settler: Settler = Settler()) -> Snapshot? {
         var recorded = initial
         for (i, step) in steps.enumerated() {
-            let decision = settler.decide(step.snapshot, atMs: step.atMs, recorded: recorded)
+            let decision = settler.decide(step.snapshot, idleSinceMs: nil, atMs: step.atMs, recorded: recorded)
             #expect(decision == step.expected, "step \(i) at +\(step.atMs - t0) ms")
-            if case .record = decision {
+            switch decision {
+            case .record:
                 recorded = step.snapshot
+            case .recordEarlier(let earlier, _, _):
+                recorded = earlier
+            case .wait:
+                break
             }
         }
         return recorded
@@ -106,6 +111,98 @@ struct SettlerTests {
         steps.append(step(last, 3_000, .record(changedAtMs: t0)))
         let end = run(steps, recorded: a)
         #expect(end == last)
+    }
+
+    /// Titles that tick every 400 ms, each one different: never seen twice.
+    private func ticking(_ i: Int) -> Snapshot {
+        Fixtures.firefox("https://example.com/timer", "0:0\(i)")
+    }
+
+    @Test func unsettledStateSeenTwiceIsRecordedOverASampleReadMidChange() {
+        // b keeps coming back between ticks; the sample at the cap is a mixed one (b's URL with
+        // a's title), which no other sample shows. b is recorded instead, from the first change.
+        let end = run([
+            step(b, 0, .wait),
+            step(ticking(1), 400, .wait),
+            step(b, 800, .wait),
+            step(ticking(2), 1_200, .wait),
+            step(ticking(3), 1_600, .wait),
+            step(ticking(4), 2_000, .wait),
+            step(ticking(5), 2_400, .wait),
+            step(ticking(6), 2_800, .wait),
+            step(bHalf, 3_000, .recordEarlier(b, idleSinceMs: nil, changedAtMs: t0)),
+            // b is the open row now, so b again just continues it.
+            step(b, 3_400, .record(changedAtMs: t0 + 3_400)),
+        ], recorded: a)
+        #expect(end == b)
+    }
+
+    @Test func latestOfSeveralStatesSeenTwiceWins() {
+        run([
+            step(b, 0, .wait),
+            step(Fixtures.notes, 400, .wait),
+            step(b, 800, .wait),
+            step(Fixtures.notes, 1_200, .wait),
+            step(ticking(1), 1_600, .wait),
+            step(ticking(2), 2_000, .wait),
+            step(ticking(3), 2_400, .wait),
+            step(ticking(4), 2_800, .wait),
+            step(bHalf, 3_000, .recordEarlier(Fixtures.notes, idleSinceMs: nil, changedAtMs: t0)),
+        ], recorded: a)
+    }
+
+    @Test func sampleAtTheCapSeenBeforeIsRecordedAsItself() {
+        run([
+            step(b, 0, .wait),
+            step(ticking(1), 400, .wait),
+            step(ticking(2), 800, .wait),
+            step(ticking(3), 1_200, .wait),
+            step(ticking(4), 1_600, .wait),
+            step(ticking(5), 2_000, .wait),
+            step(ticking(6), 2_400, .wait),
+            step(ticking(7), 2_800, .wait),
+            step(b, 3_000, .record(changedAtMs: t0)),
+        ], recorded: a)
+    }
+
+    @Test func seenTwiceNeedsSamplesAtLeast250MsApart() {
+        // b's two samples are too close to show it held, so the cap falls back to the last one seen.
+        let end = run([
+            step(b, 0, .wait),
+            step(b, 100, .wait),
+            step(ticking(1), 400, .wait),
+            step(ticking(2), 800, .wait),
+            step(ticking(3), 1_200, .wait),
+            step(ticking(4), 1_600, .wait),
+            step(ticking(5), 2_000, .wait),
+            step(ticking(6), 2_400, .wait),
+            step(ticking(7), 2_800, .wait),
+            step(bHalf, 3_000, .record(changedAtMs: t0)),
+        ], recorded: a)
+        #expect(end == bHalf)
+    }
+
+    @Test func sampleLeftPendingByTheFallbackCanSettle() {
+        // After b is recorded, the mixed sample is a new pending change of its own, first seen at
+        // the cap; if it holds, it's confirmed like any other.
+        let end = run([
+            step(b, 0, .wait),
+            step(ticking(1), 400, .wait),
+            step(b, 800, .wait),
+            step(ticking(2), 1_200, .wait),
+            step(bHalf, 3_000, .recordEarlier(b, idleSinceMs: nil, changedAtMs: t0)),
+            step(bHalf, 3_400, .record(changedAtMs: t0 + 3_000)),
+        ], recorded: a)
+        #expect(end == bHalf)
+    }
+
+    @Test func fallbackHandsBackTheEarlierSamplesIdleTime() {
+        let settler = Settler()
+        let idleB = Fixtures.idle(b)
+        #expect(settler.decide(idleB, idleSinceMs: t0 - 70_000, atMs: t0, recorded: a) == .wait)
+        #expect(settler.decide(ticking(1), idleSinceMs: nil, atMs: t0 + 400, recorded: a) == .wait)
+        #expect(settler.decide(idleB, idleSinceMs: t0 - 69_000, atMs: t0 + 800, recorded: a) == .wait)
+        #expect(settler.decide(bHalf, idleSinceMs: nil, atMs: t0 + 3_000, recorded: a) == .recordEarlier(idleB, idleSinceMs: t0 - 69_000, changedAtMs: t0))
     }
 
     @Test func clockJumpBackRecordsAtTheEarlierTime() {
