@@ -101,6 +101,20 @@ extension E2E {
             try await send("Target.activateTarget", ["targetId": tab.targetId])
         }
 
+        /// Opens DevTools for the tab (`Target.openDevTools`), docked in the tab's window as a new
+        /// profile's DevTools are, with focus in it. Returns DevTools' own page, once loaded: a
+        /// tab of its own to the protocol, so `bringToFront` moves focus to it and back, and
+        /// `close` closes it.
+        func openDevTools(_ tab: Tab) async throws -> Tab {
+            let opened = try await send("Target.openDevTools", ["targetId": tab.targetId])
+            guard let targetId = opened["targetId"] as? String else {
+                throw E2EError("Chrome: no DevTools for tab \(tab.targetId)")
+            }
+            let devTools = try await attach(targetId)
+            try await waitUntil(devTools, "document.readyState === 'complete'", "DevTools didn't load")
+            return devTools
+        }
+
         func close(_ tab: Tab) async throws {
             try await send("Target.closeTarget", ["targetId": tab.targetId])
         }

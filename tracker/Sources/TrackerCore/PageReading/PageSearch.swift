@@ -78,16 +78,21 @@ enum PageSearch {
         return WebPage(element: webArea, url: scrubbed, title: title)
     }
 
-    /// Every page counts except two that are certainly not content (see "Record raw data
+    /// Every page counts except those that are certainly not content (see "Record raw data
     /// generously" in docs/tracker-principles.md):
     /// - pages loaded from the app's own bundle, whatever the scheme: its UI (Electron's
     ///   `file://…/Claude.app/…/app.asar/…`, VS Code's `vscode-file://vscode-app/…/Visual Studio Code.app/…`);
-    /// - `about:blank`, an empty placeholder (Firefox's Picture-in-Picture player).
+    /// - `about:blank`, an empty placeholder (Firefox's Picture-in-Picture player);
+    /// - macOS's own placeholder schemes (`placeholderSchemes`).
     /// So browsers' own pages count (`chrome://new-tab-page/`, `about:newtab`, `about:preferences`),
     /// and so do app-private schemes outside the bundle (Obsidian's `app://obsidian.md/…`).
     static func isContent(_ url: URL, bundlePath: String?) -> Bool {
         let address = url.absoluteString.prefix { $0 != "?" && $0 != "#" }.lowercased()
+        let scheme = url.scheme?.lowercased() ?? ""
         if address.isEmpty || address == "about:blank" {
+            return false
+        }
+        else if placeholderSchemes.contains(scheme) || scheme.hasPrefix(quickLookSchemePrefix) {
             return false
         }
         else if let bundlePath, url.scheme != "http", url.scheme != "https", url.path.hasPrefix(bundlePath + "/") {
@@ -97,6 +102,14 @@ enum PageSearch {
             return true
         }
     }
+
+    /// Schemes macOS itself gives pages that have no address of their own, whatever app shows
+    /// them, so they're never what the user opened. `applewebdata`: WebKit's, for HTML loaded
+    /// from a string (`loadHTMLString` without a base URL), e.g. Sparkle's update dialog.
+    static let placeholderSchemes: Set<String> = ["applewebdata"]
+    /// Quick Look's previews (`x-apple-ql-id2://<uuid>/x-apple-ql-magic/…`), in Finder and any
+    /// app that shows a Quick Look panel.
+    static let quickLookSchemePrefix = "x-apple-ql-"
 
     /// The page among `pages` that holds keyboard focus, found by walking up from the focused
     /// element. Walks past other web areas on the way: focus is often in an iframe within the

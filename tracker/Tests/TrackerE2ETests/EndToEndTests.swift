@@ -200,6 +200,31 @@ struct EndToEndTests {
             try await chrome.close(window)
             try await chrome.expectFocus(first)
         }
+        // DevTools docked: two pages side by side in the tab's window, the one holding focus is
+        // recorded. The window keeps the tab's title and document. Its URL is read once it has
+        // loaded; nothing in it to scrub.
+        var devTools: E2E.Chrome.Tab!
+        var devToolsUrl = ""
+        func showsDevTools() -> E2E.Expected {
+            E2E.Expected(app: chrome.app, window: "Secret \(r)" + E2E.Chrome.windowSuffix, url: devToolsUrl, page: "DevTools", document: web.secretScrubbed)
+        }
+        try await run.step("Chrome: DevTools docked", expect: showsDevTools()) {
+            devTools = try await chrome.openDevTools(first)
+            devToolsUrl = try await chrome.eval(devTools, "location.href") as? String ?? ""
+            try await chrome.expectFocus(devTools)
+        }
+        try await run.step("Chrome: DevTools docked, focus in page", expect: shows("Secret \(r)", web.secretScrubbed)) {
+            try await chrome.bringToFront(first)
+            try await chrome.expectFocus(first)
+        }
+        try await run.step("Chrome: DevTools docked, focus in DevTools", expect: showsDevTools()) {
+            try await chrome.bringToFront(devTools)
+            try await chrome.expectFocus(devTools)
+        }
+        try await run.step("Chrome: DevTools closed", expect: shows("Secret \(r)", web.secretScrubbed)) {
+            try await chrome.close(devTools)
+            try await chrome.expectFocus(first)
+        }
         // Browsers' own pages are content too (docs/page-reading.md).
         try await run.step("Chrome: own page", expect: shows("About Version", "chrome://version/")) {
             try await chrome.navigate(first, "chrome://version/")
@@ -724,8 +749,9 @@ enum E2E {
         /// `holdMs` plus `extraLatencyMs`. The step lasts from when `action` started until the
         /// next one does. For a change the tracker is known to see late: `mayFirstBe` is a state
         /// it may record before `expected`, within `latencyMs` plus `extraLatencyMs` of the step
-        /// being done.
-        func step(_ name: String, expect expected: Expected, mayFirstBe: Expected? = nil, extraLatencyMs: Int64 = 0, _ action: () async throws -> Void) async throws {
+        /// being done. `expected` is read once `action` is done, so it can use what the action
+        /// found out (e.g. a URL only known once the page has loaded).
+        func step(_ name: String, expect expected: @autoclosure () -> Expected, mayFirstBe: Expected? = nil, extraLatencyMs: Int64 = 0, _ action: () async throws -> Void) async throws {
             let sentMs = nowMs()
             if !steps.isEmpty {
                 steps[steps.count - 1].endMs = sentMs
@@ -733,7 +759,7 @@ enum E2E {
             rowStartsBeforeMs = nil
             try await action()
             let doneMs = nowMs()
-            steps.append(Step(name: name, expected: expected, sentMs: sentMs, doneMs: doneMs, endMs: doneMs + E2E.holdMs + extraLatencyMs, rowStartsBeforeMs: rowStartsBeforeMs, mayFirstBe: mayFirstBe, extraLatencyMs: extraLatencyMs))
+            steps.append(Step(name: name, expected: expected(), sentMs: sentMs, doneMs: doneMs, endMs: doneMs + E2E.holdMs + extraLatencyMs, rowStartsBeforeMs: rowStartsBeforeMs, mayFirstBe: mayFirstBe, extraLatencyMs: extraLatencyMs))
             // Longer by the longer changeover, so as much of the step is checked as in others.
             try await Task.sleep(for: .milliseconds(E2E.holdMs + extraLatencyMs))
         }

@@ -8,6 +8,7 @@ struct IsContentTests {
     private static let vscode = "/Applications/Visual Studio Code.app"
     private static let chrome = "/Applications/Google Chrome.app"
     private static let firefox = "/Applications/Firefox Developer Edition.app"
+    private static let finder = "/System/Library/CoreServices/Finder.app"
 
     @Test("Content", arguments: [
         ("https://claude.ai/chat/1f2e3d4c", claude),
@@ -51,6 +52,11 @@ struct IsContentTests {
         ("ABOUT:BLANK", firefox),
         ("about:blank?x=1", firefox),
         ("about:blank", nil),
+        // macOS's own placeholder schemes, in any app: WebKit's for HTML loaded from a string
+        // (Sparkle's update dialog in Syncthing), Quick Look's previews (Finder).
+        ("applewebdata://ED7826B8-F639-4896-9E4B-B7DE142DE433", "/Applications/Syncthing.app"),
+        ("x-apple-ql-id2://24958A0A-F024-48E5-B3AA-006D6E1CD538/x-apple-ql-magic/", finder),
+        ("X-Apple-QL-Id://24958A0A/preview.html", finder),
     ] as [(String, String?)])
     func notContent(url: String, bundlePath: String?) {
         #expect(!PageSearch.isContent(URL(string: url)!, bundlePath: bundlePath))

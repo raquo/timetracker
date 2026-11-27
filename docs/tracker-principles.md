@@ -17,7 +17,7 @@ Rules every tracker feature follows. Other docs refer to them instead of restati
 
 **In practice.**
 - The tracker drops data only when it's certainly empty, or for privacy:
-  - empty: an `about:blank` placeholder, an app's own UI loaded from inside its bundle;
+  - empty: an `about:blank` placeholder, macOS's placeholder pages (`applewebdata:`, Quick Look's `x-apple-ql-…:`), an app's own UI loaded from inside its bundle;
   - privacy: URL scrubbing, and exclusions once they exist.
 - Everything else is the server's to filter. For example, browsers' own pages (`chrome://new-tab-page/`, `about:newtab`) and app-private schemes (`app://obsidian.md/…`) count as content and are recorded.
 - Each new signal is still weighed against its cost: the tracker's CPU, and row churn. A signal that changes constantly (a window's frame while it's dragged) multiplies rows.
