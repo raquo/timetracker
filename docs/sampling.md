@@ -18,7 +18,7 @@ Events, with a slow poll as a backstop. Code: `Tracker`, `WindowObserver`.
 |---|---|---|
 | App activation (`NSWorkspace.didActivateApplication`) | at once | app switches |
 | Focused window changed, window title changed (`AXObserver` on the frontmost app) | 300 ms after the first event (see below) | window switches, browser tab switches, documents opened |
-| Where pages are read, also: keyboard focus moved (`AXFocusedUIElementChanged`), the page's title changed, `AXLoadComplete` | same | apps whose window title stays the same while the page changes (Claude switching conversations) |
+| Where pages are read, also: keyboard focus moved (`AXFocusedUIElementChanged`), the page's title changed, a page finished loading (`AXLoadComplete`, app-wide) | same | apps whose window title stays the same while the page changes (Claude switching conversations) |
 | Any left click, anywhere (`leftMouseUp`) | 600 ms after the first click (see below) | changes that send no Accessibility event; the delay gives the app time to react to the click |
 | Lock, unlock, wake | at once | see [idle-and-away.md](idle-and-away.md) |
 | Poll | every 5 s | everything else: URL-only changes, going idle and back |

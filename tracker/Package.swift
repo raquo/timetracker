@@ -20,5 +20,12 @@ let package = Package(
             // Read from the source tree (`#filePath`), not bundled.
             exclude: ["Fixtures"]
         ),
+        // The app the end-to-end tests drive. Bundled by scripts/e2e.sh, not installed.
+        .executableTarget(name: "E2ETarget"),
+        // End-to-end: the real tracker against E2ETarget. Skipped unless run by scripts/e2e.sh.
+        .testTarget(
+            name: "TrackerE2ETests",
+            dependencies: ["TrackerCore"]
+        ),
     ]
 )

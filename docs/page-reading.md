@@ -44,7 +44,8 @@ The tracker searches the focused window afresh each time: on every sample of an 
 In an app whose page reading mode is on, a page can change while the window title stays the same (Claude switching conversations). So besides the window events every app gets ([sampling.md](sampling.md)), the tracker also listens for:
 
 - the app's keyboard focus moving (`AXFocusedUIElementChanged`);
-- the recorded page's title changing (`AXTitleChanged`), and the page finishing loading (`AXLoadComplete`).
+- the recorded page's title changing (`AXTitleChanged`);
+- any page in the app finishing loading (`AXLoadComplete`). App-wide, not only on the recorded page: a navigation can replace the page element (WebKit makes a new one per document), and the old element reports nothing more, so a navigation in a window whose title stays the same would wait for the 5 s poll. Found by the [end-to-end test](end-to-end-tests.md). Cost: a page with many frames (ads, embeds) reports a load per frame, each asking for a sample; they arrive in bursts that coalesce into one sample (300 ms, [sampling.md](sampling.md)).
 
 Clicks catch most of the rest. Apps that are probing get none of these. Code: `WindowObserver`.
 

@@ -43,6 +43,9 @@ final class WindowObserver {
         AXObserverAddNotification(created, app, kAXFocusedWindowChangedNotification as CFString, refcon)
         if watchFocusedElement {
             AXObserverAddNotification(created, app, kAXFocusedUIElementChangedNotification as CFString, refcon)
+            // App-wide, not only on the watched page (`watchPage`): a navigation can replace the page
+            // element (WebKit makes a new one per document), and the old one reports nothing more.
+            AXObserverAddNotification(created, app, AxName.loadCompleteNotification as CFString, refcon)
         }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(created), .defaultMode)
         observer = created
