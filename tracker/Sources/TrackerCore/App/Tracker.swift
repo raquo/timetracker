@@ -202,13 +202,15 @@ final class Tracker {
     }
 
     /// Takes a final sample, so the time since the last poll isn't lost, then closes the open interval.
-    /// A change seen by that sample can't be confirmed any more, so it's dropped.
+    /// A change seen by that sample can't be confirmed any more, so it's dropped, but the open row
+    /// still lasts until it was seen (`Recorder.close(pending:)`).
     private func closeInterval() {
         tick()
+        let pending = settler.pendingChange
         settler.reset()
         pageReading.saveAll()
         do {
-            try recorder.close()
+            try recorder.close(pending: pending)
         }
         catch {
             log.failure("close interval", error)

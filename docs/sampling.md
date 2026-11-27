@@ -42,13 +42,13 @@ A sample that differs from the open row isn't recorded right away:
 3. **A change that reverts** before it's confirmed is dropped: the open row just continues.
 4. **A change that never settles** (e.g. a title that changes faster than settling can confirm it, such as a progress percentage updating several times a second) is recorded after 3 s anyway, as the latest state that two samples at least 250 ms apart agreed on. If no two agreed, the last sample is recorded. If that wasn't the current sample, the current one starts a new pending change.
 5. **A change still pending when sampling stops for over 20 s** (sleep, a hang) is forgotten: after the gap it counts as first seen again, so its row can't start before the gap.
-6. **On sleep and quit,** a pending change is dropped, since it can't be confirmed any more.
+6. **On sleep and quit,** a pending change is dropped, since it can't be confirmed any more. Where the open row then ends: see "From samples to rows".
 
 ## From samples to rows
 
 - **The open row lives in memory.** Each unchanged sample moves its end; the end is written to disk every 30 s. So a crash loses at most 30 s, and the newest row on disk can lag by that much ([data-model.md](data-model.md)). Code: `Recorder`.
 - **A change closes the open row and inserts a new one,** as two separate writes ([record-consistency.md](record-consistency.md)).
-- **Before quit (SIGTERM, SIGINT) and sleep,** the tracker takes one last sample, then closes the open row at it. So the time since the last poll isn't lost. A row opened by that last sample has no duration and is deleted.
+- **Before quit (SIGTERM, SIGINT) and sleep,** the tracker takes one last sample and closes the open row, so the time since the last poll isn't lost. Usually the row ends at that sample. If something changed that isn't confirmed yet, the change isn't recorded (see "Settling"), but the row still ends when the change was first seen, since the old state was on screen until then. Example: the open row is Safari on page A, last sampled at 10:00:00; the tracker quits at 10:00:04, and its last sample sees page B. The row for A ends at 10:00:04, and B isn't recorded. Two exceptions: if the change is going idle, the row ends at the last input if that came after its last sample, else at that sample ([idle-and-away.md](idle-and-away.md)); and if the change was first seen over 20 s after the row's last sample, the row ends at that sample (the gap rule in "Sleep and wake"). A row opened by the last sample has no duration and is deleted. Code: `Recorder.close(pending:)`.
 
 ## Sleep and wake
 
@@ -72,6 +72,7 @@ Every Accessibility call times out after 0.5 s, so an app that doesn't answer ca
 
 ## Why
 
+- **On quit, an unconfirmed change ends the open row but isn't recorded.** Ending the row at its last sample instead would lose the time until the change was seen, up to a poll interval.
 - **Events plus a slow poll, not a fast poll.** Events catch most changes within a few hundred ms at almost no cost; a fast poll would cost CPU all day for the same boundaries ([tracker-principles.md](tracker-principles.md): lightweight). The poll is a backstop for what sends no event.
 - **Clicks as a trigger.** Some apps change what they show without any Accessibility event (Claude, clicking another conversation). Without the click trigger those changes would wait for the poll. A click is the only input event used, and only as "a click happened".
 - **One sample for several events.** Pages update their title several times while loading; sampling on each event would cost a sample per update. Not restarting the timer on each event keeps the delay bounded, so a page that never stops updating still gets sampled.

@@ -22,6 +22,9 @@ let package = Package(
         ),
         // The app the end-to-end tests drive. Bundled by scripts/e2e.sh, not installed.
         .executableTarget(name: "E2ETarget"),
+        // Holds the Accessibility permission for the end-to-end tests and does only what needs it.
+        // Bundled and signed by scripts/e2e.sh.
+        .executableTarget(name: "E2EHelper"),
         // End-to-end: the real tracker against E2ETarget. Skipped unless run by scripts/e2e.sh.
         .testTarget(
             name: "TrackerE2ETests",

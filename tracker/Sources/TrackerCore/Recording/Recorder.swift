@@ -112,11 +112,25 @@ final class Recorder {
         open = try insert(snapshot, startMs: startMs, endMs: nowMs)
     }
 
-    /// Ends the open interval at the last sample. Call on sleep and on quit.
+    /// Ends the open interval. Call on sleep and on quit.
+    /// At the last sample, or with `pending` (a change seen since, which can't be confirmed any
+    /// more, `Settler.pendingChange`) when that was first seen: it isn't recorded, but the open
+    /// row's state held until then. If the change is going idle, not past the last input, where
+    /// `record` would have ended the row. Never across a gap in sampling (`maxGapMs`).
     /// If the write fails, the interval stays open and the next call retries.
-    func close() throws {
-        guard let current = open else {
+    func close(pending: Settler.PendingChange? = nil) throws {
+        guard var current = open else {
             return
+        }
+        if let pending {
+            var heldUntilMs = pending.firstSeenMs
+            if pending.snapshot.isInputIdle, !current.snapshot.isInputIdle, !current.snapshot.isScreenLocked, let idleSinceMs = pending.idleSinceMs {
+                heldUntilMs = min(heldUntilMs, idleSinceMs)
+            }
+            if heldUntilMs > current.endMs, heldUntilMs - current.endMs <= Self.maxGapMs {
+                current.endMs = heldUntilMs
+                open = current
+            }
         }
         if current.endMs == current.startMs {
             // Opened by the last sample before closing: no duration, so no row.

@@ -98,6 +98,21 @@ final class Settler {
         return .wait
     }
 
+    /// The unconfirmed change, as its first sample saw it: when, what, and its `idleSinceMs`.
+    /// nil when none is pending.
+    var pendingChange: PendingChange? {
+        guard let pending, let first = history.first else {
+            return nil
+        }
+        return PendingChange(snapshot: first.snapshot, idleSinceMs: first.idleSinceMs, firstSeenMs: pending.firstSeenMs)
+    }
+
+    struct PendingChange: Equatable {
+        let snapshot: Snapshot
+        let idleSinceMs: Int64?
+        let firstSeenMs: Int64
+    }
+
     /// Drops an unconfirmed change, e.g. before closing the row on sleep or quit.
     func reset() {
         pending = nil

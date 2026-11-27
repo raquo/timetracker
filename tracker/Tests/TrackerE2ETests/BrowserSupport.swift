@@ -315,6 +315,15 @@ extension E2E.Browser {
         try await waitUntil(tab, "document.visibilityState === 'visible' && document.hasFocus()", "the tab isn't the one shown with focus")
     }
 
+    /// Checks the step's premise: the browser is in front, but keyboard focus isn't in this tab's
+    /// page (e.g. it's in the address bar).
+    func expectNoFocus(_ tab: Tab) async throws {
+        guard try E2E.frontmostPid() == pid else {
+            throw E2EError("\(Self.name) isn't in front")
+        }
+        try await waitUntil(tab, "document.hasFocus() === false", "the page still has focus")
+    }
+
     /// Waits until the tab has loaded `url`.
     func waitUntilLoaded(_ tab: Tab, _ url: String) async throws {
         try await waitUntil(tab, "document.readyState === 'complete' && location.href === \(E2E.jsString(url))", "\(url) didn't load")

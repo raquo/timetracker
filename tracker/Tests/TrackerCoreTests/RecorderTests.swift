@@ -438,13 +438,48 @@ struct PipelineTests {
         #expect(try h.rows() == [row(a, 0, 10_000), row(Fixtures.locked, 10_000, 602_000), row(idleA, 602_000, 602_400)])
     }
 
-    @Test func unconfirmedChangeAtCloseIsDropped() throws {
+    /// The change isn't recorded, but the old state held until it was seen.
+    @Test func unconfirmedChangeAtCloseIsDroppedButEndsTheRow() throws {
         try h.tick(a, at: 0)
         try h.tick(a, at: 400)
         try h.tick(a, at: 5_400)
         try h.tick(b, at: 6_000)
         try h.close()
-        #expect(try h.rows() == [row(a, 0, 5_400)])
+        #expect(try h.rows() == [row(a, 0, 6_000)])
+    }
+
+    /// As on quit: the last sample sees the change.
+    @Test func changeSeenByTheLastSampleEndsTheRowThen() throws {
+        try h.tick(a, at: 0)
+        try h.tick(a, at: 400)
+        try h.closeInterval(b, at: 4_000)
+        #expect(try h.rows() == [row(a, 0, 4_000)])
+    }
+
+    /// Not across a gap: the change counts as first seen after it.
+    @Test func unconfirmedChangeAfterAGapAtCloseDoesNotEndTheRow() throws {
+        try h.tick(a, at: 0)
+        try h.tick(a, at: 400)
+        try h.closeInterval(b, at: 30_000)
+        #expect(try h.rows() == [row(a, 0, 400)])
+    }
+
+    /// Going idle: the old row would end at the last input, so it isn't stretched past it.
+    @Test func unconfirmedGoingIdleAtCloseDoesNotExtendTheRow() throws {
+        try h.tick(a, at: 0)
+        try h.tick(a, at: 400)
+        try h.tick(a, at: 5_000)
+        try h.closeInterval(Fixtures.idle(a), at: 9_000, idleSince: 3_000)
+        #expect(try h.rows() == [row(a, 0, 5_000)])
+    }
+
+    /// Going idle with the last input after the last sample: the row ends at the last input.
+    @Test func unconfirmedGoingIdleAtCloseEndsTheRowAtTheLastInput() throws {
+        try h.tick(a, at: 0)
+        try h.tick(a, at: 400)
+        try h.tick(a, at: 5_000)
+        try h.closeInterval(Fixtures.idle(a), at: 9_000, idleSince: 7_000)
+        #expect(try h.rows() == [row(a, 0, 7_000)])
     }
 }
 

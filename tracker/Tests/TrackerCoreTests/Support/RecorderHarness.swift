@@ -32,8 +32,9 @@ final class RecorderHarness {
 
     /// As `Tracker.closeInterval`, minus its last sample.
     func close() throws {
+        let pending = settler.pendingChange
         settler.reset()
-        try recorder.close()
+        try recorder.close(pending: pending)
     }
 
     /// As `Tracker.closeInterval`: one last sample, then close.
